@@ -1,62 +1,123 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import Sidebar from './components/Sidebar';
-import Topbar from './components/Topbar';
-import ChatPanel from './components/ChatPanel';
-import MemberPanel from './components/MemberPanel';
-import ActivityView from './components/ActivityView';
-import { CreateRepoModal, InviteModal } from './components/Modals';
-import AiAssistant from './components/AiAssistant';
-import { STORAGE_KEY, seedState } from './data/demoData';
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
+import { NotificationProvider } from './context/NotificationContext';
+import { NavigationProvider } from './context/NavigationContext';
+import { RepositoryProvider } from './context/RepositoryContext';
+import { TaskProvider } from './context/TaskContext';
+import { IssueProvider } from './context/IssueContext';
+import { MemberProvider } from './context/MemberContext';
+import { ChatProvider } from './context/ChatContext';
+import { CallProvider } from './context/CallContext';
 
-const readState = () => {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || seedState; } catch { return seedState; }
-};
+import LandingPage from './pages/LandingPage';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import AuthenticatedLayout from './layouts/AuthenticatedLayout';
+import Dashboard from './pages/Dashboard';
+import Projects from './pages/Projects';
+import Messages from './pages/Messages';
+import Notifications from './pages/notifications/Notifications';
+import Activity from './pages/activity/Activity';
+import Settings from './pages/Settings';
 
-export default function App() {
-  const [state, setState] = useState(readState);
-  const [repoId, setRepoId] = useState('repo-1');
-  const [view, setView] = useState('workspace');
-  const [query, setQuery] = useState('');
-  const [draft, setDraft] = useState('');
-  const [notice, setNotice] = useState('');
-  const [createOpen, setCreateOpen] = useState(false);
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [aiOpen, setAiOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [repoForm, setRepoForm] = useState({ name: '', description: '', language: 'JavaScript', isPrivate: true });
+import ProjectLayout from './pages/repository/ProjectLayout';
+import ProjectOverview from './pages/repository/ProjectOverview';
+import RepositoryPage from './pages/repository/RepositoryPage';
+import RepositoryCommitsPage from './pages/repository/RepositoryCommitsPage';
+import RepositoryBranchesPage from './pages/repository/RepositoryBranchesPage';
+import Tasks from './pages/tasks/Tasks';
+import TaskDetail from './pages/tasks/TaskDetail';
+import Issues from './pages/issues/Issues';
+import IssueDetail from './pages/issues/IssueDetail';
+import Members from './pages/members/Members';
+import MemberDetail from './pages/members/MemberDetail';
+import Chat from './pages/chat/Chat';
+import Calls from './pages/calls/Calls';
+import CallRoom from './pages/calls/CallRoom';
 
-  useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(state)), [state]);
-  const repo = state.repos.find((item) => item.id === repoId) || state.repos[0];
-  const repos = useMemo(() => state.repos.filter((item) => `${item.name} ${item.description}`.toLowerCase().includes(query.toLowerCase())), [state.repos, query]);
-  const flash = (message) => { setNotice(message); window.setTimeout(() => setNotice(''), 2200); };
+function App() {
+  return (
+    <AuthProvider>
+      <ToastProvider>
+        <NotificationProvider>
+          <BrowserRouter>
+            <NavigationProvider>
+              <RepositoryProvider projectId="proj_1">
+                <TaskProvider projectId="proj_1">
+                  <IssueProvider projectId="proj_1">
+                    <MemberProvider projectId="proj_1">
+                      <ChatProvider projectId="proj_1">
+                        <CallProvider projectId="proj_1">
+                          <Routes>
+                            {/* Phase 2 Landing Page */}
+                            <Route path="/" element={<LandingPage />} />
+                            
+                            {/* Phase 3 Auth Routes */}
+                            <Route path="/login" element={<Login />} />
+                            <Route path="/auth/login" element={<Login />} />
+                            <Route path="/signup" element={<Signup />} />
+                            <Route path="/auth/signup" element={<Signup />} />
 
-  const sendMessage = (event) => {
-    event.preventDefault();
-    const text = draft.trim();
-    if (!text || !repo) return;
-    setState((current) => ({ ...current, repos: current.repos.map((item) => item.id === repo.id ? { ...item, messages: [...item.messages, { id: `m-${Date.now()}`, authorId: current.user.id, author: current.user.name, text, createdAt: 'now' }] } : item) }));
-    setDraft('');
-  };
+                            {/* Phase 4 & Phase 5 Application Shell & Project Routes */}
+                            <Route path="/app" element={<AuthenticatedLayout />}>
+                              <Route index element={<Navigate to="/app/dashboard" replace />} />
+                              <Route path="dashboard" element={<Dashboard />} />
+                              <Route path="projects" element={<Projects />} />
+                              <Route path="messages" element={<Messages />} />
+                              <Route path="notifications" element={<Notifications />} />
+                              <Route path="activity" element={<Activity />} />
+                              <Route path="settings" element={<Settings />} />
 
-  const createRepository = (event) => {
-    event.preventDefault();
-    if (!repoForm.name.trim()) return;
-    const created = { id: `repo-${Date.now()}`, name: repoForm.name.trim(), description: repoForm.description.trim() || 'A new CodeTogether workspace.', language: repoForm.language, isPrivate: repoForm.isPrivate, color: '#f7df1e', members: [{ id: state.user.id, name: state.user.name, role: 'Owner', online: true }], messages: [] };
-    setState((current) => ({ ...current, repos: [created, ...current.repos] }));
-    setRepoId(created.id); setCreateOpen(false); setRepoForm({ name: '', description: '', language: 'JavaScript', isPrivate: true }); flash('Repository created');
-  };
+                              {/* Phase 6, Phase 7, Phase 8 & Phase 9 Workspace Routes */}
+                              <Route path="projects/:projectId" element={<ProjectLayout />}>
+                                <Route index element={<Navigate to="repository" replace />} />
+                                <Route path="overview" element={<ProjectOverview />} />
+                                <Route path="repository" element={<RepositoryPage />} />
+                                <Route path="repository/tree/*" element={<RepositoryPage />} />
+                                <Route path="repository/commits" element={<RepositoryCommitsPage />} />
+                                <Route path="repository/commits/:commitId" element={<RepositoryCommitsPage />} />
+                                <Route path="repository/branches" element={<RepositoryBranchesPage />} />
+                                
+                                {/* Phase 7 Tasks & Issues Routes */}
+                                <Route path="tasks" element={<Tasks />} />
+                                <Route path="tasks/:taskId" element={<TaskDetail />} />
+                                <Route path="issues" element={<Issues />} />
+                                <Route path="issues/:issueId" element={<IssueDetail />} />
 
-  const prepareInvite = (event) => { event.preventDefault(); if (!inviteEmail.trim()) return; flash(`Invite prepared for ${inviteEmail}`); setInviteEmail(''); setInviteOpen(false); };
-  const reset = () => { setState(seedState); setRepoId('repo-1'); flash('Demo data reset'); };
+                                {/* Phase 8 Members Routes */}
+                                <Route path="members" element={<Members />} />
+                                <Route path="members/:memberId" element={<MemberDetail />} />
 
-  return <div className="app-shell">
-    <Sidebar state={state} repo={repo} repos={repos} view={view} setView={setView} setRepoId={setRepoId} openCreate={() => setCreateOpen(true)} reset={reset} flash={flash} />
-    <main className="main"><Topbar query={query} setQuery={setQuery} openInvite={() => setInviteOpen(true)} openAi={() => setAiOpen(true)} flash={flash} />
-      {repo && <><header className="repo-header"><div><p className="eyebrow">Repositories / {repo.name}</p><h1>{repo.name}</h1><p>{repo.description}</p></div><div className="badges"><span className={`badge ${repo.isPrivate ? 'private' : 'public'}`}>{repo.isPrivate ? 'Private' : 'Public'}</span><span className="badge language">{repo.language}</span></div></header><nav className="tabs"><button className={view === 'workspace' ? 'active' : ''} onClick={() => setView('workspace')}>Workspace</button><button onClick={() => flash('Code browser is next')}>Code</button><button onClick={() => flash('Issues are next')}>Issues</button><button onClick={() => flash('Pull requests are next')}>Pull requests</button></nav>{view === 'workspace' ? <div className="workspace"><ChatPanel repo={repo} user={state.user} draft={draft} setDraft={setDraft} sendMessage={sendMessage} /><MemberPanel repo={repo} openInvite={() => setInviteOpen(true)} /></div> : <ActivityView repos={state.repos} />}</>}
-    </main>
-    {createOpen && <CreateRepoModal form={repoForm} setForm={setRepoForm} submit={createRepository} close={() => setCreateOpen(false)} />}
-    {inviteOpen && <InviteModal repo={repo} email={inviteEmail} setEmail={setInviteEmail} submit={prepareInvite} close={() => setInviteOpen(false)} />}
-    <AiAssistant repo={repo} isOpen={aiOpen} onClose={() => setAiOpen(false)} />
-    {notice && <div className="toast">✓ {notice}</div>}
-  </div>;
+                                {/* Phase 9 Chat Routes */}
+                                <Route path="chat" element={<Chat />} />
+                                <Route path="chat/:conversationId" element={<Chat />} />
+
+                                {/* Phase 10 Calls Routes */}
+                                <Route path="calls" element={<Calls />} />
+                                <Route path="calls/:callId" element={<CallRoom />} />
+                              </Route>
+                            </Route>
+
+                            {/* Fallback */}
+                            <Route path="*" element={<Navigate to="/" replace />} />
+                          </Routes>
+                        </CallProvider>
+                      </ChatProvider>
+                    </MemberProvider>
+                  </IssueProvider>
+                </TaskProvider>
+              </RepositoryProvider>
+            </NavigationProvider>
+          </BrowserRouter>
+        </NotificationProvider>
+      </ToastProvider>
+    </AuthProvider>
+  );
 }
+
+export default App;
+
+
+
