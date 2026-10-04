@@ -193,6 +193,60 @@ const logoutUser = async (req, res, next) => {
   }
 };
 
+const crypto = require("crypto");
+
+/**
+ * Generate cryptographically secure signed OAuth state
+ */
+const generateOAuthState = () => {
+  const random = crypto.randomBytes(24).toString("hex");
+  const timestamp = Date.now();
+  const payload = `${random}.${timestamp}`;
+  const signature = crypto
+    .createHmac("sha256", process.env.JWT_SECRET || "supersecretcolabzjwtkey")
+    .update(payload)
+    .digest("hex");
+  return `${payload}.${signature}`;
+};
+
+/**
+ * Verify signed OAuth state (checks HMAC signature and 15-minute validity window)
+ */
+const verifyOAuthState = (state) => {
+  if (!state || typeof state !== "string") return false;
+  const parts = state.split(".");
+  if (parts.length !== 3) return false;
+  const [random, timestampStr, signature] = parts;
+  const timestamp = parseInt(timestampStr, 10);
+
+  // Maximum 15 minutes validity window
+  if (isNaN(timestamp) || Date.now() - timestamp > 15 * 60 * 1000 || Date.now() < timestamp - 60000) {
+    return false;
+  }
+
+  // Signature must be a valid 64-character SHA-256 hex string
+  if (!signature || !/^[a-f0-9]{64}$/i.test(signature)) {
+    return false;
+  }
+
+  const payload = `${random}.${timestampStr}`;
+  const expectedSignature = crypto
+    .createHmac("sha256", process.env.JWT_SECRET || "supersecretcolabzjwtkey")
+    .update(payload)
+    .digest("hex");
+
+  try {
+    const sigBuf = Buffer.from(signature, "hex");
+    const expectedBuf = Buffer.from(expectedSignature, "hex");
+    if (sigBuf.length !== expectedBuf.length) {
+      return false;
+    }
+    return crypto.timingSafeEqual(sigBuf, expectedBuf);
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Initiate GitHub OAuth Flow
  * Route: GET /api/auth/github
@@ -210,9 +264,13 @@ const initiateGitHubAuth = (req, res) => {
     process.env.GITHUB_CALLBACK_URL ||
     `${req.protocol}://${req.get("host")}/api/auth/github/callback`;
 
-  const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(
-    callbackUrl
-  )}&scope=user:email,read:user`;
+  const state = generateOAuthState();
+
+  const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(
+    clientId
+  )}&redirect_uri=${encodeURIComponent(callbackUrl)}&scope=user:email,read:user&state=${encodeURIComponent(
+    state
+  )}`;
 
   return res.redirect(githubAuthUrl);
 };
@@ -222,13 +280,35 @@ const initiateGitHubAuth = (req, res) => {
  * Route: GET /api/auth/github/callback
  */
 const handleGitHubCallback = async (req, res, next) => {
-  const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
+  const clientUrl = (process.env.CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "");
   try {
-    const { code, error } = req.query;
+    const { code, state, error, error_description } = req.query;
 
-    if (error || !code) {
+    // 1. Handle user cancellation or GitHub OAuth errors
+    if (error) {
       return res.redirect(
-        `${clientUrl}/login?error=${encodeURIComponent(error || "GitHub authentication cancelled")}`
+        `${clientUrl}/login?error=${encodeURIComponent(
+          error_description || error || "GitHub authentication cancelled by user"
+        )}`
+      );
+    }
+
+    // 2. Validate code and state existence
+    if (!code || !state) {
+      return res.redirect(
+        `${clientUrl}/login?error=${encodeURIComponent(
+          "Missing authorization code or state parameter"
+        )}`
+      );
+    }
+
+    // 3. Cryptographically verify state
+    const isStateValid = verifyOAuthState(state);
+    if (!isStateValid) {
+      return res.redirect(
+        `${clientUrl}/login?error=${encodeURIComponent(
+          "Invalid or expired OAuth state session. Please try logging in again."
+        )}`
       );
     }
 
@@ -238,7 +318,15 @@ const handleGitHubCallback = async (req, res, next) => {
       process.env.GITHUB_CALLBACK_URL ||
       `${req.protocol}://${req.get("host")}/api/auth/github/callback`;
 
-    // 1. Exchange code for access token
+    if (!clientId || !clientSecret) {
+      return res.redirect(
+        `${clientUrl}/login?error=${encodeURIComponent(
+          "GitHub OAuth credentials missing on server"
+        )}`
+      );
+    }
+
+    // 4. Exchange authorization code for GitHub access token
     const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
       method: "POST",
       headers: {
@@ -259,33 +347,48 @@ const handleGitHubCallback = async (req, res, next) => {
     if (!accessToken) {
       return res.redirect(
         `${clientUrl}/login?error=${encodeURIComponent(
-          tokenData.error_description || "Failed to retrieve GitHub access token"
+          tokenData.error_description || "Failed to exchange GitHub authorization code"
         )}`
       );
     }
 
-    // 2. Fetch user profile from GitHub
+    // 5. Fetch user profile from GitHub API
     const userRes = await fetch("https://api.github.com/user", {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "User-Agent": "Colabz-App",
+        Accept: "application/vnd.github.v3+json",
       },
     });
+
+    if (!userRes.ok) {
+      return res.redirect(
+        `${clientUrl}/login?error=${encodeURIComponent("Failed to fetch user profile from GitHub")}`
+      );
+    }
+
     const githubUser = await userRes.json();
 
-    // 3. Fetch user emails from GitHub
+    // 6. Fetch verified user emails from GitHub
     let primaryEmail = githubUser.email;
     if (!primaryEmail) {
-      const emailsRes = await fetch("https://api.github.com/user/emails", {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "User-Agent": "Colabz-App",
-        },
-      });
-      const emails = await emailsRes.json();
-      if (Array.isArray(emails)) {
-        const primary = emails.find((e) => e.primary && e.verified) || emails[0];
-        if (primary) primaryEmail = primary.email;
+      try {
+        const emailsRes = await fetch("https://api.github.com/user/emails", {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "User-Agent": "Colabz-App",
+            Accept: "application/vnd.github.v3+json",
+          },
+        });
+        if (emailsRes.ok) {
+          const emails = await emailsRes.json();
+          if (Array.isArray(emails)) {
+            const primary = emails.find((e) => e.primary && e.verified) || emails.find((e) => e.verified) || emails[0];
+            if (primary) primaryEmail = primary.email;
+          }
+        }
+      } catch (e) {
+        // email fetch error fallback
       }
     }
 
@@ -295,13 +398,13 @@ const handleGitHubCallback = async (req, res, next) => {
 
     primaryEmail = primaryEmail.toLowerCase().trim();
 
-    // 4. Find existing user by githubId or email
+    // 7. Find existing user by githubId OR verified email
     let user = await User.findOne({
       $or: [{ githubId: githubUser.id.toString() }, { email: primaryEmail }],
     });
 
     if (user) {
-      // Link githubId if not already linked
+      // Safely link githubId if not set
       if (!user.githubId) {
         user.githubId = githubUser.id.toString();
         user.authProvider = user.authProvider || "github";
@@ -313,7 +416,7 @@ const handleGitHubCallback = async (req, res, next) => {
       user.lastSeen = new Date();
       await user.save();
     } else {
-      // Generate clean unique username
+      // Generate clean unique Colabz username
       let baseUsername = (githubUser.login || primaryEmail.split("@")[0])
         .toLowerCase()
         .replace(/[^a-z0-9_]/g, "_")
@@ -330,7 +433,7 @@ const handleGitHubCallback = async (req, res, next) => {
       }
 
       user = await User.create({
-        name: githubUser.name || githubUser.login || "GitHub User",
+        name: githubUser.name || githubUser.login || "GitHub Developer",
         username: candidateUsername,
         email: primaryEmail,
         githubId: githubUser.id.toString(),
@@ -341,9 +444,11 @@ const handleGitHubCallback = async (req, res, next) => {
       });
     }
 
+    // 8. Generate standard Colabz JWT
     const token = generateToken(user);
     const userPayload = formatUserResponse(user, "DEVELOPER");
 
+    // 9. Clean redirect back to frontend
     return res.redirect(
       `${clientUrl}/login?token=${token}&user=${encodeURIComponent(
         JSON.stringify(userPayload)

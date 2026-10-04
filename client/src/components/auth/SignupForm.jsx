@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { User, AtSign, Mail, ArrowRight } from 'lucide-react';
@@ -8,7 +8,7 @@ import MotionButton from '../motion/MotionButton';
 import { useAuth } from '../../context/AuthContext';
 
 export default function SignupForm({ onSwitchToLogin, onInputFocus, onInputBlur }) {
-  const { signup } = useAuth();
+  const { signup, updateUser } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
@@ -18,6 +18,33 @@ export default function SignupForm({ onSwitchToLogin, onInputFocus, onInputBlur 
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
+
+  // Check URL params for GitHub OAuth callback response
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const userParam = params.get('user');
+    const err = params.get('error');
+
+    if (err) {
+      setErrors({ form: decodeURIComponent(err) });
+    } else if (token) {
+      localStorage.setItem('colabz_token', token);
+      if (userParam) {
+        try {
+          const parsedUser = JSON.parse(decodeURIComponent(userParam));
+          localStorage.setItem('colabz_user', JSON.stringify(parsedUser));
+          if (updateUser) updateUser(parsedUser);
+        } catch {
+          // ignore
+        }
+      }
+      setMessage('GitHub authentication verified! Connecting to workspace...');
+      setTimeout(() => {
+        window.location.href = '/app/dashboard';
+      }, 300);
+    }
+  }, [updateUser]);
 
   const validate = () => {
     const errs = {};
@@ -62,11 +89,9 @@ export default function SignupForm({ onSwitchToLogin, onInputFocus, onInputBlur 
     }
   };
 
-  const rawAuthUrl =
-    import.meta.env.VITE_API_URL ||
-    import.meta.env.VITE_API_BASE_URL ||
-    (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000');
-  const authBaseUrl = rawAuthUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+  const rawAuthUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '').trim();
+  const authBaseUrl = rawAuthUrl ? rawAuthUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '') : '';
+  const githubAuthUrl = `${authBaseUrl}/api/auth/github`;
 
   return (
     <motion.div
@@ -181,7 +206,7 @@ export default function SignupForm({ onSwitchToLogin, onInputFocus, onInputBlur 
 
         {/* GitHub OAuth Button */}
         <a
-          href={`${authBaseUrl}/api/auth/github`}
+          href={githubAuthUrl}
           className="clb-btn clb-btn-secondary"
           style={{
             display: 'flex',

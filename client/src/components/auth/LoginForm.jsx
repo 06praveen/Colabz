@@ -75,11 +75,9 @@ export default function LoginForm({ onSwitchToSignup, onInputFocus, onInputBlur 
     }
   };
 
-  const rawAuthUrl =
-    import.meta.env.VITE_API_URL ||
-    import.meta.env.VITE_API_BASE_URL ||
-    (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000');
-  const authBaseUrl = rawAuthUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+  const rawAuthUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '').trim();
+  const authBaseUrl = rawAuthUrl ? rawAuthUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '') : '';
+  const githubAuthUrl = `${authBaseUrl}/api/auth/github`;
 
   return (
     <motion.div
@@ -160,7 +158,7 @@ export default function LoginForm({ onSwitchToSignup, onInputFocus, onInputBlur 
 
         {/* GitHub OAuth Button */}
         <a
-          href={`${authBaseUrl}/api/auth/github`}
+          href={githubAuthUrl}
           className="clb-btn clb-btn-secondary"
           style={{
             display: 'flex',
