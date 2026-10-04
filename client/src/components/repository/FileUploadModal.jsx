@@ -88,9 +88,9 @@ export default function FileUploadModal({ isOpen, onClose, parentPath = '', onFi
     setUploading(true);
     try {
       const formData = new FormData();
-      // Append each selected file exactly once under the 'files' field
       selectedFiles.forEach((file) => {
         formData.append('files', file);
+        formData.append('file', file);
       });
 
       if (parentPath) {

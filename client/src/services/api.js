@@ -12,10 +12,7 @@ if (rawBase) {
 
 const api = axios.create({
   baseURL: resolvedBaseURL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 15000,
+  timeout: 60000,
 });
 
 // Request interceptor to attach JWT token and normalize API paths
@@ -24,6 +21,20 @@ api.interceptors.request.use(
     const token = localStorage.getItem('colabz_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    // If payload is FormData, remove Content-Type header so the browser sets multipart/form-data with the correct boundary
+    if (config.data instanceof FormData) {
+      if (config.headers) {
+        delete config.headers['Content-Type'];
+        delete config.headers['content-type'];
+        if (typeof config.headers.delete === 'function') {
+          config.headers.delete('Content-Type');
+          config.headers.delete('content-type');
+        }
+      }
+    } else if (!config.headers['Content-Type'] && !config.headers['content-type']) {
+      config.headers['Content-Type'] = 'application/json';
     }
 
     if (config.url) {
