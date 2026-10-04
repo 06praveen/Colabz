@@ -11,7 +11,7 @@ export const authService = {
     } else {
       payload = { name, username, email, password };
     }
-    const response = await api.post('/api/auth/register', payload);
+    const response = await api.post('/auth/register', payload);
     return response.data;
   },
 
@@ -22,7 +22,7 @@ export const authService = {
     const payload = emailOrUsername && emailOrUsername.includes?.('@')
       ? { email: emailOrUsername, password }
       : { emailOrUsername, username: emailOrUsername, password };
-    const response = await api.post('/api/auth/login', payload);
+    const response = await api.post('/auth/login', payload);
     return response.data;
   },
 
@@ -30,7 +30,7 @@ export const authService = {
    * Get current authenticated user profile
    */
   async getMe() {
-    const response = await api.get('/api/auth/me');
+    const response = await api.get('/auth/me');
     return response.data;
   },
 
@@ -39,7 +39,7 @@ export const authService = {
    */
   async logout() {
     try {
-      const response = await api.post('/api/auth/logout');
+      const response = await api.post('/auth/logout');
       return response.data;
     } catch {
       // Best-effort logout
