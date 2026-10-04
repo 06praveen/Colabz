@@ -23,16 +23,28 @@ export function AuthProvider({ children }) {
     const initAuth = async () => {
       const storedToken = localStorage.getItem('colabz_token');
       if (!storedToken) {
-        if (isMounted) setLoading(false);
+        if (isMounted) {
+          setUser(null);
+          setToken(null);
+          setLoading(false);
+        }
         return;
       }
 
       try {
         const response = await authService.getMe();
-        if (isMounted && response?.data?.user) {
-          const freshUser = response.data.user;
+        const dataObj = response?.data || response;
+        const freshUser = dataObj?.user || response?.user;
+        if (isMounted && freshUser) {
           setUser(freshUser);
+          setToken(storedToken);
           localStorage.setItem('colabz_user', JSON.stringify(freshUser));
+        } else if (isMounted) {
+          const savedUser = localStorage.getItem('colabz_user');
+          if (savedUser) {
+            setUser(JSON.parse(savedUser));
+            setToken(storedToken);
+          }
         }
       } catch (err) {
         // Token is invalid or expired
@@ -70,7 +82,9 @@ export function AuthProvider({ children }) {
     setLoading(true);
     try {
       const response = await authService.login(email, password);
-      const { user: loggedInUser, token: receivedToken } = response.data || {};
+      const dataObj = response?.data || response;
+      const loggedInUser = dataObj?.user || response?.user;
+      const receivedToken = dataObj?.token || response?.token;
 
       if (receivedToken) {
         localStorage.setItem('colabz_token', receivedToken);
@@ -81,7 +95,7 @@ export function AuthProvider({ children }) {
         setUser(loggedInUser);
       }
 
-      return { success: true, user: loggedInUser };
+      return { success: true, user: loggedInUser, token: receivedToken };
     } catch (err) {
       const errorMessage =
         err.response?.data?.message || err.message || 'Invalid email or password';
@@ -103,7 +117,9 @@ export function AuthProvider({ children }) {
       }
 
       const response = await authService.register(payload);
-      const { user: newUser, token: receivedToken } = response.data || {};
+      const dataObj = response?.data || response;
+      const newUser = dataObj?.user || response?.user;
+      const receivedToken = dataObj?.token || response?.token;
 
       if (receivedToken) {
         localStorage.setItem('colabz_token', receivedToken);
@@ -114,7 +130,7 @@ export function AuthProvider({ children }) {
         setUser(newUser);
       }
 
-      return { success: true, user: newUser };
+      return { success: true, user: newUser, token: receivedToken };
     } catch (err) {
       const errorMessage =
         err.response?.data?.message ||

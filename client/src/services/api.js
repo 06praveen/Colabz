@@ -5,7 +5,9 @@ const rawBase = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_U
 
 let resolvedBaseURL = '';
 if (rawBase) {
-  resolvedBaseURL = rawBase.replace(/\/+$/, '');
+  // Strip trailing slashes and trailing /api if present, then guarantee /api endpoint
+  const baseWithoutApi = rawBase.replace(/\/+$/, '').replace(/\/api\/?$/, '');
+  resolvedBaseURL = `${baseWithoutApi}/api`;
 }
 
 const api = axios.create({
@@ -25,11 +27,20 @@ api.interceptors.request.use(
     }
 
     if (config.url) {
-      const hasBaseApi = config.baseURL && config.baseURL.endsWith('/api');
-      if (hasBaseApi && config.url.startsWith('/api/')) {
-        config.url = config.url.substring(4);
-      } else if (!hasBaseApi && !config.baseURL && !config.url.startsWith('/api/') && !config.url.startsWith('http')) {
-        config.url = config.url.startsWith('/') ? `/api${config.url}` : `/api/${config.url}`;
+      if (resolvedBaseURL) {
+        // Absolute baseURL with /api
+        if (config.url.startsWith('/api/')) {
+          config.url = config.url.substring(4);
+        } else if (config.url.startsWith('api/')) {
+          config.url = `/${config.url.substring(4)}`;
+        } else if (!config.url.startsWith('/')) {
+          config.url = `/${config.url}`;
+        }
+      } else {
+        // Relative baseURL (local dev with proxy)
+        if (!config.url.startsWith('/api/') && !config.url.startsWith('http')) {
+          config.url = config.url.startsWith('/') ? `/api${config.url}` : `/api/${config.url}`;
+        }
       }
     }
 
@@ -45,7 +56,8 @@ api.interceptors.response.use(
     if (error.response && error.response.status === 401) {
       const isAuthRoute =
         error.config?.url?.includes('/auth/login') ||
-        error.config?.url?.includes('/auth/register');
+        error.config?.url?.includes('/auth/register') ||
+        error.config?.url?.includes('/auth/me');
 
       if (!isAuthRoute) {
         // Token expired or invalid

@@ -53,9 +53,7 @@ export default function SignupForm({ onSwitchToLogin, onInputFocus, onInputBlur 
       const res = await signup(name.trim(), username.trim().toLowerCase(), email.trim(), password);
       if (res.success) {
         setMessage('Workspace Created! Redirecting...');
-        setTimeout(() => {
-          navigate('/app/dashboard');
-        }, 300);
+        navigate('/app/dashboard', { replace: true });
       }
     } catch (err) {
       setErrors({ form: err.message || 'Failed to create workspace account.' });

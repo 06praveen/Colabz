@@ -46,7 +46,7 @@ export default function PublicRoute({ children }) {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/app" replace />;
+    return <Navigate to="/app/dashboard" replace />;
   }
 
   return children;

@@ -66,9 +66,7 @@ export default function LoginForm({ onSwitchToSignup, onInputFocus, onInputBlur 
       const res = await login(email, password);
       if (res.success) {
         setMessage('Access Granted! Connecting to workspace...');
-        setTimeout(() => {
-          navigate('/app/dashboard');
-        }, 300);
+        navigate('/app/dashboard', { replace: true });
       }
     } catch (err) {
       setErrors({ form: err.message || 'Invalid credentials. Please try again.' });
