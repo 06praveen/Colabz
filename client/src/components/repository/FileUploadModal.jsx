@@ -16,12 +16,39 @@ export default function FileUploadModal({ isOpen, onClose, parentPath = '', onFi
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
       const incoming = Array.from(e.target.files);
-      setSelectedFiles((prev) => {
-        const existingNames = new Set(prev.map((f) => f.name));
-        const newFiles = incoming.filter((f) => !existingNames.has(f.name));
-        return [...prev, ...newFiles];
+      addIncomingFiles(incoming);
+      // Reset input value so re-selecting same files works
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const addIncomingFiles = (incoming) => {
+    const MAX_SIZE = 20 * 1024 * 1024; // 20MB
+    const oversized = incoming.filter((f) => f.size > MAX_SIZE);
+    if (oversized.length > 0) {
+      addToast({
+        title: 'File too large',
+        message: `${oversized[0].name} exceeds the 20MB limit.`,
+        type: 'error',
       });
     }
+
+    const validFiles = incoming.filter((f) => f.size <= MAX_SIZE);
+
+    setSelectedFiles((prev) => {
+      const existingNames = new Set(prev.map((f) => f.name));
+      const newFiles = validFiles.filter((f) => !existingNames.has(f.name));
+      const combined = [...prev, ...newFiles];
+      if (combined.length > 20) {
+        addToast({
+          title: 'File limit reached',
+          message: 'Maximum 20 files can be uploaded at once.',
+          type: 'warning',
+        });
+        return combined.slice(0, 20);
+      }
+      return combined;
+    });
   };
 
   const handleDragOver = (e) => {
@@ -39,11 +66,7 @@ export default function FileUploadModal({ isOpen, onClose, parentPath = '', onFi
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const incoming = Array.from(e.dataTransfer.files);
-      setSelectedFiles((prev) => {
-        const existingNames = new Set(prev.map((f) => f.name));
-        const newFiles = incoming.filter((f) => !existingNames.has(f.name));
-        return [...prev, ...newFiles];
-      });
+      addIncomingFiles(incoming);
     }
   };
 
@@ -65,9 +88,9 @@ export default function FileUploadModal({ isOpen, onClose, parentPath = '', onFi
     setUploading(true);
     try {
       const formData = new FormData();
+      // Append each selected file exactly once under the 'files' field
       selectedFiles.forEach((file) => {
         formData.append('files', file);
-        formData.append('file', file);
       });
 
       if (parentPath) {
@@ -80,7 +103,7 @@ export default function FileUploadModal({ isOpen, onClose, parentPath = '', onFi
       const uploaded = await uploadFile(formData);
 
       addToast({
-        title: 'Files uploaded',
+        title: 'Upload complete',
         message:
           selectedFiles.length > 1
             ? `${selectedFiles.length} files were uploaded successfully.`

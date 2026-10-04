@@ -11,10 +11,39 @@ const upload = multer({
   },
 });
 
-// Middleware supporting single 'file' or multiple 'files' / 'file' fields
-const uploadMultiOrSingle = upload.any();
+// Wrapped middleware with explicit error handling so Multer never hangs the connection
+const uploadMiddleware = (req, res, next) => {
+  upload.any()(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(413).json({
+            success: false,
+            message: "File too large. Maximum size allowed is 20MB per file.",
+          });
+        }
+        if (err.code === "LIMIT_FILE_COUNT") {
+          return res.status(400).json({
+            success: false,
+            message: "Too many files. Maximum is 20 files per upload request.",
+          });
+        }
+        return res.status(400).json({
+          success: false,
+          message: `Upload error: ${err.message}`,
+        });
+      }
+      return res.status(500).json({
+        success: false,
+        message: err.message || "Failed to process uploaded file.",
+      });
+    }
+    next();
+  });
+};
 
 module.exports = {
-  uploadSingle: uploadMultiOrSingle,
-  uploadMulti: uploadMultiOrSingle,
+  uploadSingle: uploadMiddleware,
+  uploadMulti: uploadMiddleware,
 };
+

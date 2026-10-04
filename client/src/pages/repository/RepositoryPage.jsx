@@ -168,9 +168,10 @@ export default function RepositoryPage() {
             isOpen={isUploadOpen}
             onClose={() => setIsUploadOpen(false)}
             parentPath=""
-            onFileUploaded={(uploadedFile) => {
-              if (uploadedFile && uploadedFile.path) {
-                navigate(`/app/projects/${activeProjectId}/repository/tree/${uploadedFile.path}`);
+            onFileUploaded={(uploaded) => {
+              const file = uploaded?.file || (uploaded?.path ? uploaded : null);
+              if (file && (!uploaded?.files || uploaded.files.length === 1)) {
+                navigate(`/app/projects/${activeProjectId}/repository/tree/${file.path}`);
               }
             }}
           />
@@ -301,9 +302,10 @@ export default function RepositoryPage() {
         isOpen={isUploadOpen}
         onClose={() => setIsUploadOpen(false)}
         parentPath={currentNode && currentNode.isFolder ? currentNode.path : ''}
-        onFileUploaded={(uploadedFile) => {
-          if (uploadedFile && uploadedFile.path) {
-            navigate(`/app/projects/${activeProjectId}/repository/tree/${uploadedFile.path}`);
+        onFileUploaded={(uploaded) => {
+          const file = uploaded?.file || (uploaded?.path ? uploaded : null);
+          if (file && (!uploaded?.files || uploaded.files.length === 1)) {
+            navigate(`/app/projects/${activeProjectId}/repository/tree/${file.path}`);
           }
         }}
       />

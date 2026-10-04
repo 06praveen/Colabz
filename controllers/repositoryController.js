@@ -175,38 +175,80 @@ const uploadFile = async (req, res, next) => {
     const user = req.user;
     const role = (req.membership?.role || "VIEWER").toUpperCase();
 
-    const filesToUpload = req.files && req.files.length > 0
-      ? req.files
-      : req.file
-      ? [req.file]
-      : [];
+    if (role === "VIEWER") {
+      return sendError(res, "Permission denied: Viewers cannot upload files", 403);
+    }
+
+    // Collect all uploaded files from req.files or req.file
+    let filesToUpload = [];
+    if (Array.isArray(req.files) && req.files.length > 0) {
+      // De-duplicate if client sent same file under multiple field names
+      const seen = new Set();
+      for (const f of req.files) {
+        const key = `${f.originalname}_${f.size}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          filesToUpload.push(f);
+        }
+      }
+    } else if (req.file) {
+      filesToUpload.push(req.file);
+    }
 
     if (filesToUpload.length === 0 && !req.body.fileName && !req.body.content) {
       return sendError(res, "Please select at least one file to upload", 400);
     }
 
+    if (filesToUpload.length > 20) {
+      return sendError(res, "Maximum 20 files allowed per upload request", 400);
+    }
+
+    const parentPath = req.body.parentPath || "";
+    const branchName = req.body.branch || req.body.branchId || req.body.branchName;
+
     const uploadedFiles = [];
 
     if (filesToUpload.length > 0) {
       for (const f of filesToUpload) {
+        // Sanitize filename and prevent path traversal
+        const sanitizedName = (f.originalname || "uploaded_file.txt")
+          .replace(/\\/g, "/")
+          .split("/")
+          .pop()
+          .trim();
+
+        if (!sanitizedName || sanitizedName === "." || sanitizedName === "..") {
+          continue;
+        }
+
         const payload = {
-          fileName: f.originalname,
-          content: f.buffer.toString("utf8"),
-          parentPath: req.body.parentPath || "",
-          branch: req.body.branch || req.body.branchId || req.body.branchName,
+          fileName: sanitizedName,
+          content: f.buffer ? f.buffer.toString("utf8") : "",
+          parentPath,
+          branch: branchName,
         };
         const uploaded = await repositoryService.uploadFile(project, user, payload, role);
         uploadedFiles.push(uploaded);
       }
-    } else {
+    } else if (req.body.fileName) {
+      const sanitizedName = req.body.fileName
+        .replace(/\\/g, "/")
+        .split("/")
+        .pop()
+        .trim();
+
       const payload = {
-        fileName: req.body.fileName,
+        fileName: sanitizedName,
         content: req.body.content || "",
-        parentPath: req.body.parentPath || "",
-        branch: req.body.branch || req.body.branchId || req.body.branchName,
+        parentPath,
+        branch: branchName,
       };
       const uploaded = await repositoryService.uploadFile(project, user, payload, role);
       uploadedFiles.push(uploaded);
+    }
+
+    if (uploadedFiles.length === 0) {
+      return sendError(res, "No valid files were processed for upload", 400);
     }
 
     return sendSuccess(
@@ -219,7 +261,7 @@ const uploadFile = async (req, res, next) => {
       201,
       uploadedFiles.length > 1
         ? `${uploadedFiles.length} files uploaded successfully`
-        : "File uploaded successfully"
+        : `File "${uploadedFiles[0].name}" uploaded successfully`
     );
   } catch (error) {
     if (error.statusCode) {

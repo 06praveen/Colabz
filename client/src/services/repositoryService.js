@@ -202,16 +202,12 @@ export const repositoryService = {
   },
 
   /**
-   * Upload file (multipart/form-data)
+   * Upload single or multiple files (multipart/form-data)
    * POST /api/projects/:projectId/repository/upload
    */
   async uploadFile(projectId, formData) {
-    const res = await api.post(`/api/projects/${projectId}/repository/upload`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return res.data?.data?.file || res.data?.data;
+    const res = await api.post(`/api/projects/${projectId}/repository/upload`, formData);
+    return res.data?.data || res.data;
   },
 
   /**
