@@ -13,7 +13,19 @@ export function AuthProvider({ children }) {
       return null;
     }
   });
-  const [token, setToken] = useState(() => localStorage.getItem('colabz_token') || null);
+  const [token, setToken] = useState(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const urlToken = searchParams.get('token');
+      if (urlToken) {
+        localStorage.setItem('colabz_token', urlToken);
+        return urlToken;
+      }
+      return localStorage.getItem('colabz_token') || null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
 
   // Initialize auth state on application startup
@@ -21,8 +33,25 @@ export function AuthProvider({ children }) {
     let isMounted = true;
 
     const initAuth = async () => {
-      const storedToken = localStorage.getItem('colabz_token');
-      if (!storedToken) {
+      // Check if token was provided in URL query parameters (e.g. from GitHub OAuth redirect)
+      const searchParams = new URLSearchParams(window.location.search);
+      const urlToken = searchParams.get('token');
+      
+      let activeToken = urlToken || localStorage.getItem('colabz_token');
+
+      if (urlToken) {
+        localStorage.setItem('colabz_token', urlToken);
+        setToken(urlToken);
+        // Strip the token from URL history and address bar immediately for security
+        try {
+          const cleanUrl = window.location.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!activeToken) {
         if (isMounted) {
           setUser(null);
           setToken(null);
@@ -37,13 +66,13 @@ export function AuthProvider({ children }) {
         const freshUser = dataObj?.user || response?.user;
         if (isMounted && freshUser) {
           setUser(freshUser);
-          setToken(storedToken);
+          setToken(activeToken);
           localStorage.setItem('colabz_user', JSON.stringify(freshUser));
         } else if (isMounted) {
           const savedUser = localStorage.getItem('colabz_user');
           if (savedUser) {
             setUser(JSON.parse(savedUser));
-            setToken(storedToken);
+            setToken(activeToken);
           }
         }
       } catch (err) {

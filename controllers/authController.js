@@ -262,7 +262,9 @@ const initiateGitHubAuth = (req, res) => {
 
   const callbackUrl =
     process.env.GITHUB_CALLBACK_URL ||
-    `${req.protocol}://${req.get("host")}/api/auth/github/callback`;
+    (process.env.NODE_ENV === "production"
+      ? "https://colabz-backend.onrender.com/api/auth/github/callback"
+      : `${req.protocol}://${req.get("host")}/api/auth/github/callback`);
 
   const state = generateOAuthState();
 
@@ -280,53 +282,45 @@ const initiateGitHubAuth = (req, res) => {
  * Route: GET /api/auth/github/callback
  */
 const handleGitHubCallback = async (req, res, next) => {
-  const clientUrl = (process.env.CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "");
-  try {
-    const { code, state, error, error_description } = req.query;
+  const clientUrl = (
+    process.env.CLIENT_URL ||
+    (process.env.NODE_ENV === "production"
+      ? "https://colabz.onrender.com"
+      : "http://localhost:5173")
+  ).replace(/\/+$/, "");
 
-    // 1. Handle user cancellation or GitHub OAuth errors
+  try {
+    const { code, state, error } = req.query;
+
+    // 1. Handle user cancellation or GitHub OAuth errors safely without reflecting arbitrary params
     if (error) {
-      return res.redirect(
-        `${clientUrl}/login?error=${encodeURIComponent(
-          error_description || error || "GitHub authentication cancelled by user"
-        )}`
-      );
+      return res.redirect(`${clientUrl}/login?error=oauth_cancelled`);
     }
 
     // 2. Validate code and state existence
     if (!code || !state) {
-      return res.redirect(
-        `${clientUrl}/login?error=${encodeURIComponent(
-          "Missing authorization code or state parameter"
-        )}`
-      );
+      return res.redirect(`${clientUrl}/login?error=invalid_request`);
     }
 
-    // 3. Cryptographically verify state
+    // 3. Cryptographically verify state (HMAC-SHA256 constant-time check)
     const isStateValid = verifyOAuthState(state);
     if (!isStateValid) {
-      return res.redirect(
-        `${clientUrl}/login?error=${encodeURIComponent(
-          "Invalid or expired OAuth state session. Please try logging in again."
-        )}`
-      );
+      return res.redirect(`${clientUrl}/login?error=state_mismatch`);
     }
 
     const clientId = process.env.GITHUB_CLIENT_ID;
     const clientSecret = process.env.GITHUB_CLIENT_SECRET;
     const callbackUrl =
       process.env.GITHUB_CALLBACK_URL ||
-      `${req.protocol}://${req.get("host")}/api/auth/github/callback`;
+      (process.env.NODE_ENV === "production"
+        ? "https://colabz-backend.onrender.com/api/auth/github/callback"
+        : `${req.protocol}://${req.get("host")}/api/auth/github/callback`);
 
     if (!clientId || !clientSecret) {
-      return res.redirect(
-        `${clientUrl}/login?error=${encodeURIComponent(
-          "GitHub OAuth credentials missing on server"
-        )}`
-      );
+      return res.redirect(`${clientUrl}/login?error=server_configuration_error`);
     }
 
-    // 4. Exchange authorization code for GitHub access token
+    // 4. Exchange authorization code for GitHub access token (server-side only)
     const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
       method: "POST",
       headers: {
@@ -345,14 +339,10 @@ const handleGitHubCallback = async (req, res, next) => {
     const accessToken = tokenData.access_token;
 
     if (!accessToken) {
-      return res.redirect(
-        `${clientUrl}/login?error=${encodeURIComponent(
-          tokenData.error_description || "Failed to exchange GitHub authorization code"
-        )}`
-      );
+      return res.redirect(`${clientUrl}/login?error=token_exchange_failed`);
     }
 
-    // 5. Fetch user profile from GitHub API
+    // 5. Fetch user profile from GitHub API (server-side only)
     const userRes = await fetch("https://api.github.com/user", {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -362,9 +352,7 @@ const handleGitHubCallback = async (req, res, next) => {
     });
 
     if (!userRes.ok) {
-      return res.redirect(
-        `${clientUrl}/login?error=${encodeURIComponent("Failed to fetch user profile from GitHub")}`
-      );
+      return res.redirect(`${clientUrl}/login?error=profile_fetch_failed`);
     }
 
     const githubUser = await userRes.json();
@@ -383,7 +371,10 @@ const handleGitHubCallback = async (req, res, next) => {
         if (emailsRes.ok) {
           const emails = await emailsRes.json();
           if (Array.isArray(emails)) {
-            const primary = emails.find((e) => e.primary && e.verified) || emails.find((e) => e.verified) || emails[0];
+            const primary =
+              emails.find((e) => e.primary && e.verified) ||
+              emails.find((e) => e.verified) ||
+              emails[0];
             if (primary) primaryEmail = primary.email;
           }
         }
@@ -446,19 +437,12 @@ const handleGitHubCallback = async (req, res, next) => {
 
     // 8. Generate standard Colabz JWT
     const token = generateToken(user);
-    const userPayload = formatUserResponse(user, "DEVELOPER");
 
-    // 9. Clean redirect back to frontend
-    return res.redirect(
-      `${clientUrl}/login?token=${token}&user=${encodeURIComponent(
-        JSON.stringify(userPayload)
-      )}`
-    );
+    // 9. Redirect directly to frontend dashboard with token (safe, non-login page)
+    return res.redirect(`${clientUrl}/app/dashboard?token=${encodeURIComponent(token)}`);
   } catch (err) {
     console.error("GitHub OAuth Callback error:", err);
-    return res.redirect(
-      `${clientUrl}/login?error=${encodeURIComponent("Authentication failed: " + err.message)}`
-    );
+    return res.redirect(`${clientUrl}/login?error=oauth_failed`);
   }
 };
 

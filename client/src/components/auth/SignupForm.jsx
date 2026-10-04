@@ -19,32 +19,31 @@ export default function SignupForm({ onSwitchToLogin, onInputFocus, onInputBlur 
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
 
-  // Check URL params for GitHub OAuth callback response
+  // Check URL params for GitHub OAuth error response
   useEffect(() => {
+    const errorMap = {
+      oauth_cancelled: 'GitHub authentication was cancelled.',
+      invalid_request: 'Missing OAuth authorization parameters.',
+      state_mismatch: 'OAuth security validation failed. Please try again.',
+      server_configuration_error: 'GitHub OAuth is not configured on the server.',
+      token_exchange_failed: 'Failed to authenticate with GitHub.',
+      profile_fetch_failed: 'Unable to retrieve GitHub profile.',
+      oauth_failed: 'GitHub authentication failed. Please try again.',
+    };
+
     const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    const userParam = params.get('user');
     const err = params.get('error');
 
     if (err) {
-      setErrors({ form: decodeURIComponent(err) });
-    } else if (token) {
-      localStorage.setItem('colabz_token', token);
-      if (userParam) {
-        try {
-          const parsedUser = JSON.parse(decodeURIComponent(userParam));
-          localStorage.setItem('colabz_user', JSON.stringify(parsedUser));
-          if (updateUser) updateUser(parsedUser);
-        } catch {
-          // ignore
-        }
+      const friendlyMessage = errorMap[err] || 'GitHub authentication failed. Please try again.';
+      setErrors({ form: friendlyMessage });
+      try {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch {
+        // ignore
       }
-      setMessage('GitHub authentication verified! Connecting to workspace...');
-      setTimeout(() => {
-        window.location.href = '/app/dashboard';
-      }, 300);
     }
-  }, [updateUser]);
+  }, []);
 
   const validate = () => {
     const errs = {};
