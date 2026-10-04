@@ -32,7 +32,7 @@ export async function sendAiMessage({
   };
 
   try {
-    const res = await api.post('/ai/chat', payload);
+    const res = await api.post('/api/ai/chat', payload);
     return res.data?.data || res.data;
   } catch (error) {
     const message =
@@ -49,7 +49,7 @@ export async function sendAiMessage({
  */
 export async function checkAiStatus() {
   try {
-    const res = await api.get('/ai/status');
+    const res = await api.get('/api/ai/status');
     return res.data?.data || res.data;
   } catch {
     return { configured: false, model: 'gemini-3.8-flash' };

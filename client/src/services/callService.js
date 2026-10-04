@@ -5,7 +5,7 @@ export const callService = {
    * Start a call via REST API
    */
   startCall: async (projectId, { receiverId, type = 'VIDEO', title = '' }) => {
-    const res = await api.post(`/projects/${projectId}/calls`, {
+    const res = await api.post(`/api/projects/${projectId}/calls`, {
       receiverId,
       type,
       title,
@@ -22,7 +22,7 @@ export const callService = {
     if (params.page) query.append('page', params.page);
     if (params.limit) query.append('limit', params.limit);
 
-    const res = await api.get(`/projects/${projectId}/calls?${query.toString()}`);
+    const res = await api.get(`/api/projects/${projectId}/calls?${query.toString()}`);
     return res.data?.data?.calls || [];
   },
 
@@ -30,7 +30,7 @@ export const callService = {
    * Get single call by ID
    */
   getCall: async (projectId, callId) => {
-    const res = await api.get(`/projects/${projectId}/calls/${callId}`);
+    const res = await api.get(`/api/projects/${projectId}/calls/${callId}`);
     return res.data?.data?.call;
   },
 };

@@ -11,7 +11,7 @@ export const notificationService = {
     if (params.unreadOnly || params.filter === 'unread') query.append('unreadOnly', 'true');
     if (params.projectId) query.append('projectId', params.projectId);
 
-    const res = await api.get(`/notifications?${query.toString()}`);
+    const res = await api.get(`/api/notifications?${query.toString()}`);
     return res.data?.data?.notifications || [];
   },
 
@@ -19,7 +19,7 @@ export const notificationService = {
    * Get unread notification count
    */
   getUnreadCount: async () => {
-    const res = await api.get('/notifications/unread-count');
+    const res = await api.get('/api/notifications/unread-count');
     return res.data?.data?.count || 0;
   },
 
@@ -27,7 +27,7 @@ export const notificationService = {
    * Mark single notification as read
    */
   markAsRead: async (notificationId) => {
-    const res = await api.patch(`/notifications/${notificationId}/read`);
+    const res = await api.patch(`/api/notifications/${notificationId}/read`);
     return res.data?.data?.notification;
   },
 
@@ -35,7 +35,7 @@ export const notificationService = {
    * Mark all notifications as read
    */
   markAllAsRead: async () => {
-    const res = await api.patch('/notifications/read-all');
+    const res = await api.patch('/api/notifications/read-all');
     return res.data?.data;
   },
 
@@ -43,7 +43,7 @@ export const notificationService = {
    * Delete single notification
    */
   deleteNotification: async (notificationId) => {
-    const res = await api.delete(`/notifications/${notificationId}`);
+    const res = await api.delete(`/api/notifications/${notificationId}`);
     return res.data?.data;
   },
 
@@ -51,7 +51,7 @@ export const notificationService = {
    * Clear all notifications
    */
   clearAllNotifications: async () => {
-    const res = await api.delete('/notifications');
+    const res = await api.delete('/api/notifications');
     return res.data?.data;
   },
 };

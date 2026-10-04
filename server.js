@@ -35,15 +35,35 @@ app.use(
   })
 );
 
-// CORS Setup
-app.use(
-  cors({
-    origin: CLIENT_URL,
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+// CORS Setup supporting Render production URL and local development
+const allowedOrigins = [
+  CLIENT_URL,
+  CLIENT_URL.replace(/\/+$/, ""),
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:3000",
+].filter(Boolean);
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const normalized = origin.replace(/\/+$/, "");
+    if (allowedOrigins.some((o) => o.replace(/\/+$/, "") === normalized)) {
+      return callback(null, true);
+    }
+    if (env.NODE_ENV !== "production") {
+      return callback(null, true);
+    }
+    return callback(new Error(`Origin ${origin} not allowed by CORS`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 // Body Parsers with Safe Size Limits
 app.use(express.json({ limit: "2mb" }));
@@ -116,8 +136,8 @@ process.on("SIGTERM", () => handleGracefulShutdown("SIGTERM"));
 
 // Start HTTP Server when executed directly
 if (require.main === module) {
-  server.listen(PORT, () => {
-    console.log(`Colabz server running in ${env.NODE_ENV} mode on port ${PORT}`);
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`Colabz server running in ${env.NODE_ENV} mode on port ${PORT} bound to 0.0.0.0`);
   });
 }
 

@@ -2,9 +2,13 @@ import { io } from 'socket.io-client';
 
 let socket = null;
 
-const SOCKET_URL = import.meta.env.VITE_API_BASE_URL
-  ? import.meta.env.VITE_API_BASE_URL.replace(/\/api\/?$/, '')
-  : 'http://localhost:5000';
+const rawSocketUrl =
+  (import.meta.env.VITE_SOCKET_URL ||
+    import.meta.env.VITE_API_URL ||
+    import.meta.env.VITE_API_BASE_URL ||
+    (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000')).trim();
+
+const SOCKET_URL = rawSocketUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '');
 
 /**
  * Get or initialize singleton Socket.IO connection

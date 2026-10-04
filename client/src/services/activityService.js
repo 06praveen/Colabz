@@ -11,7 +11,7 @@ export const activityService = {
     if (params.limit) query.append('limit', params.limit);
     if (params.type && params.type !== 'all') query.append('type', params.type);
 
-    const res = await api.get(`/projects/${projectId}/activity?${query.toString()}`);
+    const res = await api.get(`/api/projects/${projectId}/activity?${query.toString()}`);
     return res.data?.data?.activities || [];
   },
 };

@@ -5,11 +5,29 @@ const { registerChatSocket } = require("./chatSocket");
 const { registerCallSocket } = require("./callSocket");
 
 const initSocket = (server) => {
-  const allowedOrigin = process.env.CLIENT_URL || "http://localhost:5173";
+  const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
+  const allowedOrigins = [
+    clientUrl,
+    clientUrl.replace(/\/+$/, ""),
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+  ].filter(Boolean);
 
   const io = new Server(server, {
     cors: {
-      origin: allowedOrigin,
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        const normalized = origin.replace(/\/+$/, "");
+        if (allowedOrigins.some((o) => o.replace(/\/+$/, "") === normalized)) {
+          return callback(null, true);
+        }
+        if (process.env.NODE_ENV !== "production") {
+          return callback(null, true);
+        }
+        return callback(new Error(`Socket origin ${origin} not allowed`));
+      },
       methods: ["GET", "POST", "PATCH", "DELETE"],
       credentials: true,
     },

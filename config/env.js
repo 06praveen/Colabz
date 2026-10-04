@@ -44,6 +44,9 @@ function validateEnv() {
     CLIENT_URL: process.env.CLIENT_URL || "http://localhost:5173",
     GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
     GEMINI_MODEL: process.env.GEMINI_MODEL || "gemini-3.8-flash",
+    GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID || "",
+    GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET || "",
+    GITHUB_CALLBACK_URL: process.env.GITHUB_CALLBACK_URL || "",
   };
 }
 
