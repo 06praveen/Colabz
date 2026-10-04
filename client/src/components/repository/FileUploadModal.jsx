@@ -2,10 +2,10 @@ import React, { useState, useRef } from 'react';
 import Modal from '../ui/Modal';
 import { useRepository } from '../../context/RepositoryContext';
 import { useToast } from '../../context/ToastContext';
-import { Upload, File, X, Loader2 } from 'lucide-react';
+import { Upload, File, X, Loader2, CheckCircle2 } from 'lucide-react';
 
 export default function FileUploadModal({ isOpen, onClose, parentPath = '', onFileUploaded }) {
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
@@ -14,8 +14,13 @@ export default function FileUploadModal({ isOpen, onClose, parentPath = '', onFi
   const { addToast } = useToast();
 
   const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      const incoming = Array.from(e.target.files);
+      setSelectedFiles((prev) => {
+        const existingNames = new Set(prev.map((f) => f.name));
+        const newFiles = incoming.filter((f) => !existingNames.has(f.name));
+        return [...prev, ...newFiles];
+      });
     }
   };
 
@@ -32,17 +37,26 @@ export default function FileUploadModal({ isOpen, onClose, parentPath = '', onFi
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setSelectedFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const incoming = Array.from(e.dataTransfer.files);
+      setSelectedFiles((prev) => {
+        const existingNames = new Set(prev.map((f) => f.name));
+        const newFiles = incoming.filter((f) => !existingNames.has(f.name));
+        return [...prev, ...newFiles];
+      });
     }
+  };
+
+  const removeFile = (indexToRemove) => {
+    setSelectedFiles((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedFile) {
+    if (selectedFiles.length === 0) {
       addToast({
-        title: 'No file selected',
-        message: 'Please select a file to upload.',
+        title: 'No files selected',
+        message: 'Please select at least one file to upload.',
         type: 'warning',
       });
       return;
@@ -51,7 +65,11 @@ export default function FileUploadModal({ isOpen, onClose, parentPath = '', onFi
     setUploading(true);
     try {
       const formData = new FormData();
-      formData.append('file', selectedFile);
+      selectedFiles.forEach((file) => {
+        formData.append('files', file);
+        formData.append('file', file);
+      });
+
       if (parentPath) {
         formData.append('parentPath', parentPath);
       }
@@ -62,8 +80,11 @@ export default function FileUploadModal({ isOpen, onClose, parentPath = '', onFi
       const uploaded = await uploadFile(formData);
 
       addToast({
-        title: 'File uploaded',
-        message: `File "${selectedFile.name}" was uploaded successfully.`,
+        title: 'Files uploaded',
+        message:
+          selectedFiles.length > 1
+            ? `${selectedFiles.length} files were uploaded successfully.`
+            : `File "${selectedFiles[0].name}" was uploaded successfully.`,
         type: 'success',
       });
 
@@ -71,7 +92,7 @@ export default function FileUploadModal({ isOpen, onClose, parentPath = '', onFi
         onFileUploaded(uploaded);
       }
 
-      setSelectedFile(null);
+      setSelectedFiles([]);
       onClose();
     } catch (err) {
       const errorMsg =
@@ -86,8 +107,10 @@ export default function FileUploadModal({ isOpen, onClose, parentPath = '', onFi
     }
   };
 
+  const totalBytes = selectedFiles.reduce((acc, f) => acc + f.size, 0);
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Upload file to repository">
+    <Modal isOpen={isOpen} onClose={onClose} title="Upload files to repository">
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         {parentPath && (
           <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
@@ -117,6 +140,7 @@ export default function FileUploadModal({ isOpen, onClose, parentPath = '', onFi
         >
           <input
             type="file"
+            multiple
             ref={fileInputRef}
             onChange={handleFileChange}
             style={{ display: 'none' }}
@@ -139,65 +163,95 @@ export default function FileUploadModal({ isOpen, onClose, parentPath = '', onFi
 
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-              Click to browse or drag & drop file
+              Click to browse or drag & drop multiple files
             </div>
             <div style={{ fontSize: '0.775rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-              Supports code files, config, JSON, Markdown, and text files up to 15MB
+              Select single or multiple code, config, JSON, Markdown, and text files up to 20MB
             </div>
           </div>
         </div>
 
-        {/* Selected File Badge */}
-        {selectedFile && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '0.65rem 0.85rem',
-              backgroundColor: 'var(--bg-input)',
-              border: '1px solid var(--border-default)',
-              borderRadius: 'var(--radius-sm)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-              <File size={16} color="var(--accent-primary)" />
-              <div style={{ fontSize: '0.8125rem', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {selectedFile.name}
-              </div>
-              <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-                ({(selectedFile.size / 1024).toFixed(1)} KB)
-              </span>
+        {/* Selected Files List */}
+        {selectedFiles.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              <span>SELECTED FILES ({selectedFiles.length})</span>
+              <span>Total: {(totalBytes / 1024).toFixed(1)} KB</span>
             </div>
 
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedFile(null);
-              }}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-                padding: '2px',
-                display: 'flex',
-                alignItems: 'center',
-              }}
-            >
-              <X size={14} />
-            </button>
+            {selectedFiles.map((file, idx) => (
+              <div
+                key={`${file.name}-${idx}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '0.55rem 0.75rem',
+                  backgroundColor: 'var(--bg-input)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flex: 1 }}>
+                  <File size={15} color="var(--accent-primary)" style={{ flexShrink: 0 }} />
+                  <div style={{ fontSize: '0.8125rem', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {file.name}
+                  </div>
+                  <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                    ({(file.size / 1024).toFixed(1)} KB)
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeFile(idx);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: '2px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    marginLeft: '0.5rem',
+                  }}
+                  title="Remove file"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.25rem' }}>
-          <button type="button" onClick={onClose} className="clb-btn clb-btn-ghost" disabled={uploading}>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedFiles([]);
+              onClose();
+            }}
+            className="clb-btn clb-btn-ghost"
+            disabled={uploading}
+          >
             Cancel
           </button>
-          <button type="submit" className="clb-btn clb-btn-primary" disabled={!selectedFile || uploading}>
+          <button
+            type="submit"
+            className="clb-btn clb-btn-primary"
+            disabled={selectedFiles.length === 0 || uploading}
+          >
             {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
-            <span>{uploading ? 'Uploading...' : 'Upload file'}</span>
+            <span>
+              {uploading
+                ? 'Uploading...'
+                : selectedFiles.length > 1
+                ? `Upload ${selectedFiles.length} files`
+                : 'Upload file'}
+            </span>
           </button>
         </div>
       </form>

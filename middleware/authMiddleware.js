@@ -48,4 +48,41 @@ const protect = async (req, res, next) => {
   }
 };
 
+/**
+ * Middleware for optional authentication (sets req.user if valid token present)
+ */
+const optionalAuth = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    req.user = null;
+    return next();
+  }
+
+  const token = authHeader.split(" ")[1];
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "supersecretcolabzjwtkey"
+    );
+
+    const userId = decoded.userId || decoded.id;
+    if (userId) {
+      const user = await User.findById(userId).select("-password");
+      req.user = user || null;
+    }
+  } catch (err) {
+    req.user = null;
+  }
+
+  next();
+};
+
 module.exports = protect;
+module.exports.protect = protect;
+module.exports.optionalAuth = optionalAuth;

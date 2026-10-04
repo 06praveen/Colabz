@@ -13,6 +13,7 @@ export default function ParticipantGrid({ call }) {
     isScreenSharing,
     toggleScreenShare,
     localStream,
+    remoteStreams = {},
     remoteStream,
   } = useCalls();
 
@@ -21,8 +22,8 @@ export default function ParticipantGrid({ call }) {
 
   if (!call) return null;
 
-  // Identify self member and peer member
-  const myId = user ? (user._id ? user._id.toString() : user.id) : currentUserId;
+  // Identify self member
+  const myId = (user ? (user._id ? user._id.toString() : user.id) : currentUserId) || 'self';
 
   const selfMember = {
     id: myId,
@@ -31,20 +32,62 @@ export default function ParticipantGrid({ call }) {
     avatar: user?.avatar || null,
   };
 
-  const callerId = call.callerId || (call.caller?._id ? call.caller._id.toString() : call.caller?.id);
-  const receiverId = call.receiverId || (call.receiver?._id ? call.receiver._id.toString() : call.receiver?.id);
+  // Resolve all remote participant IDs for this call
+  const remotePeerIds = new Set();
 
-  const peerId = callerId === myId ? receiverId : callerId;
-  const peerObj = callerId === myId ? call.receiver : call.caller;
+  // Add keys from active remoteStreams
+  Object.keys(remoteStreams).forEach((id) => {
+    if (id && id !== myId) remotePeerIds.add(id);
+  });
 
-  const peerMember =
-    members.find((m) => (m.userId || m.id || m._id) === peerId) ||
-    peerObj || {
+  // Add from call accepted / participants list if group
+  if (Array.isArray(call.acceptedParticipants)) {
+    call.acceptedParticipants.forEach((p) => {
+      const pid = p?._id ? p._id.toString() : p?.id || (typeof p === 'string' ? p : null);
+      if (pid && pid !== myId) remotePeerIds.add(pid);
+    });
+  }
+
+  // 1-on-1 fallback
+  if (remotePeerIds.size === 0) {
+    const callerId = call.callerId || (call.caller?._id ? call.caller._id.toString() : call.caller?.id);
+    const receiverId = call.receiverId || (call.receiver?._id ? call.receiver._id.toString() : call.receiver?.id);
+    const peerId = callerId === myId ? receiverId : callerId;
+    if (peerId && peerId !== myId) {
+      remotePeerIds.add(peerId);
+    }
+  }
+
+  const remotePeersList = Array.from(remotePeerIds).map((peerId) => {
+    const memberObj =
+      members.find((m) => (m.userId || m.id || m._id) === peerId) ||
+      (call.caller && (call.caller._id === peerId || call.caller.id === peerId) ? call.caller : null) ||
+      (call.receiver && (call.receiver._id === peerId || call.receiver.id === peerId) ? call.receiver : null) ||
+      {
+        id: peerId,
+        _id: peerId,
+        name: `Teammate`,
+        avatar: null,
+      };
+
+    const stream = remoteStreams[peerId] || (remotePeersListCount === 1 ? remoteStream : null);
+    return {
       id: peerId,
-      _id: peerId,
-      name: peerObj?.name || 'Peer',
-      avatar: peerObj?.avatar || null,
+      member: memberObj,
+      stream,
     };
+  });
+
+  const remotePeersListCount = remotePeersList.length;
+  const totalTiles = remotePeersListCount + 1; // + 1 for self
+
+  // Dynamic grid template columns
+  let gridTemplateCols = '1fr';
+  if (totalTiles === 2) {
+    gridTemplateCols = 'repeat(auto-fit, minmax(280px, 1fr))';
+  } else if (totalTiles >= 3) {
+    gridTemplateCols = 'repeat(auto-fit, minmax(260px, 1fr))';
+  }
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.85rem', width: '100%', height: '100%', minHeight: 0 }}>
@@ -81,31 +124,33 @@ export default function ParticipantGrid({ call }) {
         </div>
       )}
 
-      {/* Main Grid Container (1-to-1 Split View) */}
+      {/* Main Grid Container (Responsive Multi-Tile Grid) */}
       <div
         className="participant-grid-responsive"
         style={{
           flex: 1,
           display: 'grid',
-          gridTemplateColumns: remoteStream ? '1fr 1fr' : '1fr',
+          gridTemplateColumns: gridTemplateCols,
           gap: '1rem',
           minHeight: 0,
           width: '100%',
+          overflowY: 'auto',
+          alignContent: 'center',
         }}
       >
-        {/* Remote Peer Tile */}
-        {peerMember && (
+        {/* Remote Peer Tiles */}
+        {remotePeersList.map(({ id, member, stream }) => (
           <ParticipantTile
-            key="peer-tile"
-            member={peerMember}
-            stream={remoteStream}
+            key={`peer-tile-${id}`}
+            member={member}
+            stream={stream || (remotePeersListCount === 1 ? remoteStream : null)}
             isSelf={false}
             isMuted={false}
             isVideoOff={false}
             isSpeaking={false}
             connectionQuality={call.connectionQuality || 'Good'}
           />
-        )}
+        ))}
 
         {/* Self Local Tile */}
         <ParticipantTile

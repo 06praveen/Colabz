@@ -2,19 +2,21 @@ const callService = require("../services/callService");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 
 /**
- * Start a new call
+ * Start a new call (1-on-1 or Group)
  * Route: POST /api/projects/:projectId/calls
  */
 const startCall = async (req, res, next) => {
   try {
     const project = req.project;
     const userId = req.user._id || req.user.id;
-    const { receiverId, type, title } = req.body;
+    const { receiverId, participantIds, isGroup, type, title } = req.body;
 
     const call = await callService.createCall({
       projectId: project._id,
       callerId: userId,
       receiverId,
+      participantIds,
+      isGroup,
       type,
       title,
     });
@@ -65,8 +67,48 @@ const getCallById = async (req, res, next) => {
   }
 };
 
+/**
+ * Leave a call
+ * Route: POST /api/projects/:projectId/calls/:callId/leave
+ */
+const leaveCall = async (req, res, next) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { callId } = req.params;
+
+    const call = await callService.leaveCall(callId, userId);
+    return sendSuccess(res, { call }, 200, "Left call successfully");
+  } catch (error) {
+    if (error.statusCode) {
+      return sendError(res, error.message, error.statusCode);
+    }
+    next(error);
+  }
+};
+
+/**
+ * End a call
+ * Route: POST /api/projects/:projectId/calls/:callId/end
+ */
+const endCall = async (req, res, next) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { callId } = req.params;
+
+    const call = await callService.endCall(callId, userId);
+    return sendSuccess(res, { call }, 200, "Call ended successfully");
+  } catch (error) {
+    if (error.statusCode) {
+      return sendError(res, error.message, error.statusCode);
+    }
+    next(error);
+  }
+};
+
 module.exports = {
   startCall,
   getCalls,
   getCallById,
+  leaveCall,
+  endCall,
 };

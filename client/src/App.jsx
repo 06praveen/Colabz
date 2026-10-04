@@ -35,6 +35,7 @@ import Chat from './pages/chat/Chat';
 import Calls from './pages/calls/Calls';
 import CallRoom from './pages/calls/CallRoom';
 
+import PublicProfile from './pages/PublicProfile';
 import ErrorBoundary from './components/ui/ErrorBoundary';
 
 function App() {
@@ -49,6 +50,10 @@ function App() {
                 <Routes>
                   {/* Landing Page */}
                   <Route path="/" element={<LandingPage />} />
+
+                  {/* Public Profile Routes */}
+                  <Route path="/users/:username" element={<PublicProfile />} />
+                  <Route path="/@:username" element={<PublicProfile />} />
 
                   {/* Public Auth Routes */}
                   <Route

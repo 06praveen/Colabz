@@ -11,32 +11,29 @@ const {
   uploadFile,
 } = require("../controllers/repositoryController");
 const { getFileHistory } = require("../controllers/commitController");
-const protect = require("../middleware/authMiddleware");
-const { requireProjectMember } = require("../middleware/membershipMiddleware");
+const { protect, optionalAuth } = require("../middleware/authMiddleware");
+const {
+  requireProjectMember,
+  requireProjectMemberOrPublicReadOnly,
+} = require("../middleware/membershipMiddleware");
 const { uploadSingle } = require("../middleware/uploadMiddleware");
 
 const router = express.Router({ mergeParams: true });
 
-// All routes require authentication and project membership
-router.use(protect);
-router.use(requireProjectMember);
+// Read-only endpoints: accessible by project members OR public visitors if project is public
+router.get("/", optionalAuth, requireProjectMemberOrPublicReadOnly, getRepositoryTree);
+router.get("/tree", optionalAuth, requireProjectMemberOrPublicReadOnly, getRepositoryTree);
+router.get("/file", optionalAuth, requireProjectMemberOrPublicReadOnly, getFileByPath);
+router.get("/files/:fileId/history", optionalAuth, requireProjectMemberOrPublicReadOnly, getFileHistory);
+router.get("/files/:fileId", optionalAuth, requireProjectMemberOrPublicReadOnly, getFileById);
+router.get("/files/*", optionalAuth, requireProjectMemberOrPublicReadOnly, getFileByPath);
 
-// Repository Tree
-router.get("/", getRepositoryTree);
-router.get("/tree", getRepositoryTree);
-
-// File Operations
-router.get("/file", getFileByPath);
-router.post("/files", createFile);
-router.post("/upload", uploadSingle, uploadFile);
-router.get("/files/:fileId/history", getFileHistory);
-router.get("/files/:fileId", getFileById);
-router.patch("/files/:fileId", updateFile);
-router.delete("/files/:fileId", deleteFile);
-router.get("/files/*", getFileByPath);
-
-// Folder Operations
-router.post("/folders", createFolder);
-router.delete("/folders", deleteFolder);
+// Write/Mutation endpoints: STRICTLY require authenticated active membership
+router.post("/files", protect, requireProjectMember, createFile);
+router.post("/upload", protect, requireProjectMember, uploadSingle, uploadFile);
+router.patch("/files/:fileId", protect, requireProjectMember, updateFile);
+router.delete("/files/:fileId", protect, requireProjectMember, deleteFile);
+router.post("/folders", protect, requireProjectMember, createFolder);
+router.delete("/folders", protect, requireProjectMember, deleteFolder);
 
 module.exports = router;

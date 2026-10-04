@@ -4,17 +4,16 @@ const {
   getCommitById,
   createCommit,
 } = require("../controllers/commitController");
-const protect = require("../middleware/authMiddleware");
-const { requireProjectMember } = require("../middleware/membershipMiddleware");
+const { protect, optionalAuth } = require("../middleware/authMiddleware");
+const {
+  requireProjectMember,
+  requireProjectMemberOrPublicReadOnly,
+} = require("../middleware/membershipMiddleware");
 
 const router = express.Router({ mergeParams: true });
 
-// All routes require authentication and project membership
-router.use(protect);
-router.use(requireProjectMember);
-
-router.get("/", getCommits);
-router.get("/:commitId", getCommitById);
-router.post("/", createCommit);
+router.get("/", optionalAuth, requireProjectMemberOrPublicReadOnly, getCommits);
+router.get("/:commitId", optionalAuth, requireProjectMemberOrPublicReadOnly, getCommitById);
+router.post("/", protect, requireProjectMember, createCommit);
 
 module.exports = router;

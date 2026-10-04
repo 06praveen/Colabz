@@ -18,7 +18,7 @@ export function CallProvider({ projectId = 'proj_1', children }) {
 
   // Streams
   const [localStream, setLocalStream] = useState(null);
-  const [remoteStream, setRemoteStream] = useState(null);
+  const [remoteStreams, setRemoteStreams] = useState({}); // { [peerId]: MediaStream }
 
   // Local Media & Panel State Controls
   const [isMuted, setIsMuted] = useState(false);
@@ -30,15 +30,20 @@ export function CallProvider({ projectId = 'proj_1', children }) {
 
   const [timerSeconds, setTimerSeconds] = useState(0);
 
-  const peerConnectionRef = useRef(null);
+  const peerConnectionsRef = useRef(new Map()); // Map<peerId, RTCPeerConnection>
   const localStreamRef = useRef(null);
-  const remoteStreamRef = useRef(null);
   const activeCallRef = useRef(null);
 
   const { user, isAuthenticated } = useAuth();
   const { addToast } = useToast();
 
   const currentUserId = user ? (user._id ? user._id.toString() : user.id) : 'usr_1';
+
+  // Backwards compatibility: primary remote stream (first one)
+  const remoteStream = useMemo(() => {
+    const streamKeys = Object.keys(remoteStreams);
+    return streamKeys.length > 0 ? remoteStreams[streamKeys[0]] : null;
+  }, [remoteStreams]);
 
   // Keep activeCallRef in sync
   useEffect(() => {
@@ -83,15 +88,74 @@ export function CallProvider({ projectId = 'proj_1', children }) {
 
   // Cleanup helper
   const cleanCallSession = useCallback(() => {
-    webrtcService.cleanup(peerConnectionRef.current, localStreamRef.current, remoteStreamRef.current);
-    peerConnectionRef.current = null;
-    localStreamRef.current = null;
-    remoteStreamRef.current = null;
+    peerConnectionsRef.current.forEach((pc) => {
+      if (pc) {
+        try {
+          pc.close();
+        } catch (e) {
+          // ignore
+        }
+      }
+    });
+    peerConnectionsRef.current.clear();
+
+    if (localStreamRef.current) {
+      webrtcService.stopMediaStream(localStreamRef.current);
+      localStreamRef.current = null;
+    }
     setLocalStream(null);
-    setRemoteStream(null);
+    setRemoteStreams({});
     setIsMuted(false);
     setIsVideoOff(false);
     setIsScreenSharing(false);
+  }, []);
+
+  /**
+   * Helper to create / retrieve a peer connection for a specific peerId
+   */
+  const getOrCreatePeerConnection = useCallback((peerId, callId) => {
+    if (!peerId) return null;
+    if (peerConnectionsRef.current.has(peerId)) {
+      return peerConnectionsRef.current.get(peerId);
+    }
+
+    const socket = getSocket();
+    const pc = webrtcService.createPeerConnection({
+      onTrack: (rStream) => {
+        setRemoteStreams((prev) => ({
+          ...prev,
+          [peerId]: rStream,
+        }));
+        setCallState('active');
+      },
+      onIceCandidate: (candidate) => {
+        if (socket) {
+          socket.emit('webrtc:ice-candidate', {
+            callId,
+            targetUserId: peerId,
+            candidate,
+          });
+        }
+      },
+      onConnectionStateChange: (state) => {
+        if (state === 'connected') {
+          setCallState('active');
+        } else if (state === 'disconnected' || state === 'failed') {
+          setRemoteStreams((prev) => {
+            const next = { ...prev };
+            delete next[peerId];
+            return next;
+          });
+        }
+      },
+    });
+
+    if (localStreamRef.current) {
+      webrtcService.addLocalTracks(pc, localStreamRef.current);
+    }
+
+    peerConnectionsRef.current.set(peerId, pc);
+    return pc;
   }, []);
 
   // Socket.IO Call & WebRTC signaling listeners
@@ -109,61 +173,79 @@ export function CallProvider({ projectId = 'proj_1', children }) {
       setCallState('incoming');
     };
 
-    // 2. Call Accepted Event (Caller side)
+    // 2. Call Accepted Event (Caller side / Existing participants)
     const handleCallAccepted = async (data) => {
       const callData = data.call || data;
+      const peerId = data.userId || (callData.receiver?._id ? callData.receiver._id.toString() : callData.receiver?.id) || (callData.caller?._id ? callData.caller._id.toString() : callData.caller?.id);
       setActiveCall(callData);
       setCallState('connecting');
 
-      try {
-        // Create Peer Connection
-        const pc = webrtcService.createPeerConnection({
-          onTrack: (rStream) => {
-            remoteStreamRef.current = rStream;
-            setRemoteStream(rStream);
-            setCallState('active');
-          },
-          onIceCandidate: (candidate) => {
-            socket.emit('webrtc:ice-candidate', {
-              callId: callData.id || callData._id,
-              candidate,
+      const targetCallId = callData.id || callData._id;
+
+      if (peerId && peerId !== currentUserId) {
+        try {
+          const pc = getOrCreatePeerConnection(peerId, targetCallId);
+          if (pc) {
+            const offer = await webrtcService.createOffer(pc);
+            socket.emit('webrtc:offer', {
+              callId: targetCallId,
+              targetUserId: peerId,
+              sdp: offer,
             });
-          },
-          onConnectionStateChange: (state) => {
-            if (state === 'connected') {
-              setCallState('active');
-            } else if (state === 'disconnected' || state === 'failed') {
-              addToast({
-                title: 'Connection warning',
-                message: 'Peer connection interrupted. Attempting reconnect...',
-                type: 'warning',
-              });
-            }
-          },
-        });
-
-        peerConnectionRef.current = pc;
-
-        // Attach local tracks
-        if (localStreamRef.current) {
-          webrtcService.addLocalTracks(pc, localStreamRef.current);
+          }
+        } catch (err) {
+          console.error('Failed to create offer for peer:', peerId, err);
         }
+      }
+    };
 
-        // Create and send SDP Offer
-        const offer = await webrtcService.createOffer(pc);
-        socket.emit('webrtc:offer', {
-          callId: callData.id || callData._id,
-          sdp: offer,
+    // 2b. Group Participant Joined
+    const handleParticipantJoined = async (data) => {
+      const { call, newUserId } = data;
+      if (call) setActiveCall(call);
+      const targetCallId = (call && (call.id || call._id)) || (activeCallRef.current && (activeCallRef.current.id || activeCallRef.current._id));
+
+      if (newUserId && newUserId !== currentUserId && targetCallId) {
+        try {
+          const pc = getOrCreatePeerConnection(newUserId, targetCallId);
+          if (pc) {
+            const offer = await webrtcService.createOffer(pc);
+            socket.emit('webrtc:offer', {
+              callId: targetCallId,
+              targetUserId: newUserId,
+              sdp: offer,
+            });
+          }
+        } catch (err) {
+          console.error('Failed to initiate offer to joined participant:', err);
+        }
+      }
+    };
+
+    // 2c. Group Participant Left
+    const handleParticipantLeft = (data) => {
+      const { participantId, call } = data;
+      if (call) setActiveCall(call);
+      if (participantId) {
+        const pc = peerConnectionsRef.current.get(participantId);
+        if (pc) {
+          try {
+            pc.close();
+          } catch (e) {
+            // ignore
+          }
+          peerConnectionsRef.current.delete(participantId);
+        }
+        setRemoteStreams((prev) => {
+          const next = { ...prev };
+          delete next[participantId];
+          return next;
         });
-      } catch (err) {
-        console.error('Failed to create WebRTC offer:', err);
         addToast({
-          title: 'Call Error',
-          message: err.userFriendly || err.message || 'Failed to establish call media.',
-          type: 'error',
+          title: 'Participant Left',
+          message: 'A participant left the call session.',
+          type: 'info',
         });
-        cleanCallSession();
-        setCallState('idle');
       }
     };
 
@@ -210,54 +292,31 @@ export function CallProvider({ projectId = 'proj_1', children }) {
       loadCalls();
     };
 
-    // 6. WebRTC Offer (Receiver side)
+    // 6. WebRTC Offer (Receiver / Peer side)
     const handleWebRTCOffer = async (data) => {
-      const { callId, sdp } = data;
+      const { callId, sdp, fromUserId } = data;
+      const senderId = fromUserId || (activeCallRef.current?.caller?._id ? activeCallRef.current.caller._id.toString() : activeCallRef.current?.caller?.id);
       try {
-        let pc = peerConnectionRef.current;
-        if (!pc) {
-          pc = webrtcService.createPeerConnection({
-            onTrack: (rStream) => {
-              remoteStreamRef.current = rStream;
-              setRemoteStream(rStream);
-              setCallState('active');
-            },
-            onIceCandidate: (candidate) => {
-              socket.emit('webrtc:ice-candidate', {
-                callId,
-                candidate,
-              });
-            },
-            onConnectionStateChange: (state) => {
-              if (state === 'connected') {
-                setCallState('active');
-              }
-            },
+        const pc = getOrCreatePeerConnection(senderId, callId);
+        if (pc) {
+          const answer = await webrtcService.createAnswer(pc, sdp);
+          socket.emit('webrtc:answer', {
+            callId,
+            targetUserId: senderId,
+            sdp: answer,
           });
-          peerConnectionRef.current = pc;
         }
-
-        // Attach local tracks
-        if (localStreamRef.current) {
-          webrtcService.addLocalTracks(pc, localStreamRef.current);
-        }
-
-        // Create and send SDP Answer
-        const answer = await webrtcService.createAnswer(pc, sdp);
-        socket.emit('webrtc:answer', {
-          callId,
-          sdp: answer,
-        });
       } catch (err) {
         console.error('Failed to handle WebRTC offer:', err);
       }
     };
 
-    // 7. WebRTC Answer (Caller side)
+    // 7. WebRTC Answer (Caller / Peer side)
     const handleWebRTCAnswer = async (data) => {
-      const { sdp } = data;
+      const { sdp, fromUserId } = data;
+      const senderId = fromUserId || (activeCallRef.current?.receiver?._id ? activeCallRef.current.receiver._id.toString() : activeCallRef.current?.receiver?.id);
       try {
-        const pc = peerConnectionRef.current;
+        const pc = peerConnectionsRef.current.get(senderId);
         if (pc) {
           await webrtcService.setRemoteAnswer(pc, sdp);
         }
@@ -268,9 +327,10 @@ export function CallProvider({ projectId = 'proj_1', children }) {
 
     // 8. WebRTC ICE Candidate
     const handleIceCandidate = async (data) => {
-      const { candidate } = data;
+      const { candidate, fromUserId } = data;
+      const senderId = fromUserId || (activeCallRef.current?.receiver?._id ? activeCallRef.current.receiver._id.toString() : activeCallRef.current?.receiver?.id);
       try {
-        const pc = peerConnectionRef.current;
+        const pc = peerConnectionsRef.current.get(senderId);
         if (pc) {
           await webrtcService.addIceCandidate(pc, candidate);
         }
@@ -281,6 +341,8 @@ export function CallProvider({ projectId = 'proj_1', children }) {
 
     socket.on('call:incoming', handleIncomingCall);
     socket.on('call:accepted', handleCallAccepted);
+    socket.on('call:participant-joined', handleParticipantJoined);
+    socket.on('call:participant-left', handleParticipantLeft);
     socket.on('call:rejected', handleCallRejected);
     socket.on('call:cancelled', handleCallCancelled);
     socket.on('call:ended', handleCallEnded);
@@ -291,6 +353,8 @@ export function CallProvider({ projectId = 'proj_1', children }) {
     return () => {
       socket.off('call:incoming', handleIncomingCall);
       socket.off('call:accepted', handleCallAccepted);
+      socket.off('call:participant-joined', handleParticipantJoined);
+      socket.off('call:participant-left', handleParticipantLeft);
       socket.off('call:rejected', handleCallRejected);
       socket.off('call:cancelled', handleCallCancelled);
       socket.off('call:ended', handleCallEnded);
@@ -298,7 +362,7 @@ export function CallProvider({ projectId = 'proj_1', children }) {
       socket.off('webrtc:answer', handleWebRTCAnswer);
       socket.off('webrtc:ice-candidate', handleIceCandidate);
     };
-  }, [isAuthenticated, addToast, cleanCallSession, loadCalls, callState]);
+  }, [isAuthenticated, addToast, cleanCallSession, loadCalls, currentUserId, getOrCreatePeerConnection]);
 
   // Page unload cleanup
   useEffect(() => {
@@ -306,7 +370,7 @@ export function CallProvider({ projectId = 'proj_1', children }) {
       if (activeCallRef.current) {
         const socket = getSocket();
         if (socket) {
-          socket.emit('call:end', { callId: activeCallRef.current.id || activeCallRef.current._id });
+          socket.emit('call:leave', { callId: activeCallRef.current.id || activeCallRef.current._id });
         }
       }
       cleanCallSession();
@@ -338,10 +402,10 @@ export function CallProvider({ projectId = 'proj_1', children }) {
   }, []);
 
   /**
-   * Start 1-to-1 Call
+   * Start 1-to-1 or Group Call
    */
   const startNewCall = useCallback(
-    async ({ receiverId, type = 'video', title = '' }) => {
+    async ({ receiverId, participantIds = [], type = 'video', title = '' }) => {
       try {
         const isVoice = (type || '').toLowerCase() === 'voice' || (type || '').toUpperCase() === 'AUDIO';
         const stream = await webrtcService.getLocalMedia({
@@ -353,8 +417,16 @@ export function CallProvider({ projectId = 'proj_1', children }) {
         setLocalStream(stream);
         setIsVideoOff(isVoice);
 
+        const targetParticipants = Array.isArray(participantIds) && participantIds.length > 0
+          ? participantIds
+          : receiverId
+          ? [receiverId]
+          : [];
+
         const newCall = await callService.startCall(projectId, {
-          receiverId,
+          receiverId: targetParticipants[0],
+          participantIds: targetParticipants,
+          isGroup: targetParticipants.length > 1,
           type: isVoice ? 'AUDIO' : 'VIDEO',
           title,
         });
@@ -366,7 +438,7 @@ export function CallProvider({ projectId = 'proj_1', children }) {
 
         addToast({
           title: 'Calling...',
-          message: `Ringing ${newCall.receiver?.name || 'peer'}...`,
+          message: `Ringing ${newCall.title || 'participants'}...`,
           type: 'info',
         });
 
@@ -500,7 +572,7 @@ export function CallProvider({ projectId = 'proj_1', children }) {
     if (activeCallId) {
       const socket = getSocket();
       if (socket) {
-        socket.emit('call:end', { callId: activeCallId });
+        socket.emit('call:leave', { callId: activeCallId });
       }
     }
     cleanCallSession();
@@ -514,8 +586,21 @@ export function CallProvider({ projectId = 'proj_1', children }) {
   }, [activeCallId, cleanCallSession, loadCalls]);
 
   const endCallForEveryone = useCallback(async () => {
-    await leaveActiveCall();
-  }, [leaveActiveCall]);
+    if (activeCallId) {
+      const socket = getSocket();
+      if (socket) {
+        socket.emit('call:end', { callId: activeCallId });
+      }
+    }
+    cleanCallSession();
+    setCallState('idle');
+    setActiveCall(null);
+    setActiveCallId(null);
+    setIsChatOpen(false);
+    setIsParticipantsOpen(false);
+    setIsDetailsOpen(false);
+    await loadCalls();
+  }, [activeCallId, cleanCallSession, loadCalls]);
 
   const toggleMicrophone = () => {
     if (localStreamRef.current) {
@@ -560,6 +645,7 @@ export function CallProvider({ projectId = 'proj_1', children }) {
     setCallState,
     localStream,
     remoteStream,
+    remoteStreams,
     loading,
     currentUserId,
     isMuted,

@@ -236,6 +236,18 @@ code, pre, .font-mono {
   to { transform: rotate(360deg); }
 }
 
+/* Responsive Utilities & Mobile Layout Enhancements */
+.clb-table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.clb-modal-container {
+  max-width: 92vw;
+  max-height: 90vh;
+}
+
 @media (max-width: 768px) {
   .desktop-only-sidebar {
     display: none !important;
@@ -274,6 +286,9 @@ code, pre, .font-mono {
   }
   .chat-details-panel-container {
     display: none !important;
+  }
+  .participant-grid-responsive {
+    grid-template-columns: 1fr !important;
   }
 }
 

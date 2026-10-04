@@ -11,9 +11,9 @@ const registerCallSocket = (io, socket) => {
   const userId = user.id || user._id.toString();
 
   /**
-   * Helper to verify call participation
+   * Helper to verify call participation and resolve target recipient
    */
-  const getCallParticipant = async (callId) => {
+  const getCallParticipant = async (callId, explicitTargetUserId = null) => {
     if (!callId || !mongoose.Types.ObjectId.isValid(callId)) {
       const err = new Error("Valid call ID is required");
       err.code = "INVALID_CALL";
@@ -27,16 +27,41 @@ const registerCallSocket = (io, socket) => {
       throw err;
     }
 
-    const callerId = call.caller.toString();
-    const receiverId = call.receiver.toString();
+    const callerId = call.caller ? call.caller.toString() : null;
+    const receiverId = call.receiver ? call.receiver.toString() : null;
+    const allParticipantIds = (call.participants || []).map((p) => p.toString());
+    const acceptedIds = (call.acceptedParticipants || []).map((p) => p.toString());
 
-    if (callerId !== userId && receiverId !== userId) {
+    const isAuthorized =
+      callerId === userId ||
+      receiverId === userId ||
+      allParticipantIds.includes(userId) ||
+      acceptedIds.includes(userId);
+
+    if (!isAuthorized) {
       const err = new Error("Not authorized for this call session");
       err.code = "UNAUTHORIZED_CALL_PARTICIPANT";
       throw err;
     }
 
-    const targetUserId = callerId === userId ? receiverId : callerId;
+    let targetUserId = explicitTargetUserId;
+    if (targetUserId) {
+      const isTargetValid =
+        callerId === targetUserId ||
+        receiverId === targetUserId ||
+        allParticipantIds.includes(targetUserId) ||
+        acceptedIds.includes(targetUserId);
+
+      if (!isTargetValid) {
+        const err = new Error("Target peer is not in this call session");
+        err.code = "INVALID_PEER";
+        throw err;
+      }
+    } else {
+      // 1-on-1 fallback
+      targetUserId = callerId === userId ? receiverId : callerId;
+    }
+
     return { call, callerId, receiverId, targetUserId };
   };
 
@@ -95,6 +120,24 @@ const registerCallSocket = (io, socket) => {
   });
 
   /**
+   * Leave call
+   * Event: call:leave
+   */
+  socket.on("call:leave", async (data = {}, callback) => {
+    try {
+      const { callId } = data;
+      const formatted = await callService.leaveCall(callId, userId);
+      if (typeof callback === "function") {
+        callback({ success: true, data: { call: formatted } });
+      }
+    } catch (err) {
+      if (typeof callback === "function") {
+        callback({ success: false, error: err.message });
+      }
+    }
+  });
+
+  /**
    * End ongoing or ringing call
    * Event: call:end
    */
@@ -118,16 +161,19 @@ const registerCallSocket = (io, socket) => {
    */
   socket.on("webrtc:offer", async (data = {}, callback) => {
     try {
-      const { callId, sdp } = data;
+      const { callId, targetUserId: explicitTarget, sdp } = data;
       if (!sdp) throw new Error("SDP offer payload is required");
 
-      const { targetUserId } = await getCallParticipant(callId);
+      const { targetUserId } = await getCallParticipant(callId, explicitTarget);
+
+      if (!targetUserId) throw new Error("No target user found for offer");
 
       // Forward offer strictly to the target peer's private user room
       io.to(`user:${targetUserId}`).emit("webrtc:offer", {
         callId,
         sdp,
         fromUserId: userId,
+        targetUserId,
       });
 
       if (typeof callback === "function") {
@@ -146,16 +192,19 @@ const registerCallSocket = (io, socket) => {
    */
   socket.on("webrtc:answer", async (data = {}, callback) => {
     try {
-      const { callId, sdp } = data;
+      const { callId, targetUserId: explicitTarget, sdp } = data;
       if (!sdp) throw new Error("SDP answer payload is required");
 
-      const { targetUserId } = await getCallParticipant(callId);
+      const { targetUserId } = await getCallParticipant(callId, explicitTarget);
+
+      if (!targetUserId) throw new Error("No target user found for answer");
 
       // Forward answer strictly to the target peer's private user room
       io.to(`user:${targetUserId}`).emit("webrtc:answer", {
         callId,
         sdp,
         fromUserId: userId,
+        targetUserId,
       });
 
       if (typeof callback === "function") {
@@ -174,16 +223,19 @@ const registerCallSocket = (io, socket) => {
    */
   socket.on("webrtc:ice-candidate", async (data = {}, callback) => {
     try {
-      const { callId, candidate } = data;
+      const { callId, targetUserId: explicitTarget, candidate } = data;
       if (!candidate) throw new Error("ICE candidate payload is required");
 
-      const { targetUserId } = await getCallParticipant(callId);
+      const { targetUserId } = await getCallParticipant(callId, explicitTarget);
+
+      if (!targetUserId) throw new Error("No target user found for candidate");
 
       // Forward ICE candidate strictly to the target peer's private user room
       io.to(`user:${targetUserId}`).emit("webrtc:ice-candidate", {
         callId,
         candidate,
         fromUserId: userId,
+        targetUserId,
       });
 
       if (typeof callback === "function") {

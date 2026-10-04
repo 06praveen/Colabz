@@ -17,13 +17,32 @@ const callSchema = new mongoose.Schema(
     receiver: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: [true, "Receiver is required"],
+      default: null,
       index: true,
     },
+    isGroup: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    participants: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        index: true,
+      },
+    ],
+    acceptedParticipants: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        index: true,
+      },
+    ],
     title: {
       type: String,
       trim: true,
-      default: "1-on-1 Call",
+      default: "Call Session",
     },
     type: {
       type: String,

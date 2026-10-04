@@ -1,15 +1,20 @@
 const multer = require("multer");
 
-// Configure memory storage to read uploaded file buffer
+// Configure memory storage to read uploaded file buffers
 const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
   limits: {
-    fileSize: 15 * 1024 * 1024, // 15MB file size limit
+    fileSize: 20 * 1024 * 1024, // 20MB per file limit
+    files: 20, // Max 20 files at once
   },
 });
 
+// Middleware supporting single 'file' or multiple 'files' / 'file' fields
+const uploadMultiOrSingle = upload.any();
+
 module.exports = {
-  uploadSingle: upload.single("file"),
+  uploadSingle: uploadMultiOrSingle,
+  uploadMulti: uploadMultiOrSingle,
 };

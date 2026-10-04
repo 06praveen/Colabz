@@ -6,12 +6,12 @@ import { useMembers } from '../../context/MemberContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Video, Mic, Plus, User } from 'lucide-react';
+import { Video, Mic, Plus, Users, CheckSquare, Square } from 'lucide-react';
 
 export default function StartCallModal({ isOpen, onClose }) {
   const [title, setTitle] = useState('');
   const [type, setType] = useState('video'); // 'video' | 'voice'
-  const [selectedReceiverId, setSelectedReceiverId] = useState('');
+  const [selectedMemberIds, setSelectedMemberIds] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
   const { startNewCall } = useCalls();
@@ -29,18 +29,35 @@ export default function StartCallModal({ isOpen, onClose }) {
   });
 
   useEffect(() => {
-    if (availableMembers.length > 0 && !selectedReceiverId) {
+    if (availableMembers.length > 0 && selectedMemberIds.length === 0) {
       const firstId = availableMembers[0].userId || availableMembers[0].id || availableMembers[0]._id;
-      setSelectedReceiverId(firstId);
+      setSelectedMemberIds([firstId.toString()]);
     }
-  }, [availableMembers, selectedReceiverId]);
+  }, [availableMembers, selectedMemberIds.length]);
+
+  const toggleMemberSelection = (memberId) => {
+    const idStr = memberId.toString();
+    setSelectedMemberIds((prev) =>
+      prev.includes(idStr) ? prev.filter((id) => id !== idStr) : [...prev, idStr]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedMemberIds.length === availableMembers.length) {
+      setSelectedMemberIds([]);
+    } else {
+      setSelectedMemberIds(
+        availableMembers.map((m) => (m.userId || m.id || m._id).toString())
+      );
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedReceiverId) {
+    if (selectedMemberIds.length === 0) {
       addToast({
-        title: 'Select a teammate',
-        message: 'Please choose a team member to call.',
+        title: 'Select participants',
+        message: 'Please select at least one teammate to call.',
         type: 'warning',
       });
       return;
@@ -48,10 +65,14 @@ export default function StartCallModal({ isOpen, onClose }) {
 
     try {
       setSubmitting(true);
+      const isGroup = selectedMemberIds.length > 1;
+      const defaultTitle = isGroup ? `Group ${type === 'video' ? 'Video' : 'Audio'} Call` : title;
+
       const newCall = await startNewCall({
-        receiverId: selectedReceiverId,
+        receiverId: selectedMemberIds[0],
+        participantIds: selectedMemberIds,
         type,
-        title,
+        title: title.trim() || defaultTitle,
       });
 
       onClose();
@@ -63,16 +84,39 @@ export default function StartCallModal({ isOpen, onClose }) {
     }
   };
 
+  const isGroupCall = selectedMemberIds.length > 1;
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Start 1-on-1 Call">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={isGroupCall ? `Start Group Call (${selectedMemberIds.length} members)` : 'Start Call'}
+    >
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
-          Direct peer-to-peer audio/video call with an active teammate.
+          {isGroupCall
+            ? 'Start a group audio/video conference with multiple team members.'
+            : 'Direct peer-to-peer audio/video call with an active teammate.'}
         </p>
 
         {/* Teammate Selection */}
         <div className="clb-input-group">
-          <label className="clb-label">Select Teammate</label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+            <label className="clb-label" style={{ margin: 0 }}>
+              Select Participants ({selectedMemberIds.length}/{availableMembers.length})
+            </label>
+            {availableMembers.length > 1 && (
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="clb-btn clb-btn-ghost"
+                style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', height: 'auto' }}
+              >
+                {selectedMemberIds.length === availableMembers.length ? 'Deselect All' : 'Select All'}
+              </button>
+            )}
+          </div>
+
           {availableMembers.length === 0 ? (
             <div
               style={{
@@ -88,14 +132,23 @@ export default function StartCallModal({ isOpen, onClose }) {
               No other active members found in this project. Invite members to start calling.
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '180px', overflowY: 'auto' }}>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.4rem',
+                maxHeight: '180px',
+                overflowY: 'auto',
+                paddingRight: '0.2rem',
+              }}
+            >
               {availableMembers.map((m) => {
-                const memberId = m.userId || m.id || m._id;
-                const isSelected = selectedReceiverId === memberId;
+                const memberId = (m.userId || m.id || m._id).toString();
+                const isSelected = selectedMemberIds.includes(memberId);
                 return (
                   <div
                     key={memberId}
-                    onClick={() => setSelectedReceiverId(memberId)}
+                    onClick={() => toggleMemberSelection(memberId)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -109,6 +162,11 @@ export default function StartCallModal({ isOpen, onClose }) {
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                      {isSelected ? (
+                        <CheckSquare size={16} color="var(--accent-primary)" />
+                      ) : (
+                        <Square size={16} color="var(--text-muted)" />
+                      )}
                       <Avatar name={m.name} src={m.avatar} size={28} />
                       <div>
                         <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -161,7 +219,7 @@ export default function StartCallModal({ isOpen, onClose }) {
               }}
             >
               <Video size={16} />
-              <span>Video Call</span>
+              <span>{isGroupCall ? 'Group Video' : 'Video Call'}</span>
             </button>
 
             <button
@@ -182,7 +240,7 @@ export default function StartCallModal({ isOpen, onClose }) {
               }}
             >
               <Mic size={16} />
-              <span>Voice Call</span>
+              <span>{isGroupCall ? 'Group Audio' : 'Voice Call'}</span>
             </button>
           </div>
         </div>
@@ -193,7 +251,7 @@ export default function StartCallModal({ isOpen, onClose }) {
           <input
             type="text"
             className="clb-input"
-            placeholder="e.g. Code Review or Sync"
+            placeholder={isGroupCall ? 'e.g. Sprint Planning Sync' : 'e.g. Code Review or Quick Sync'}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
@@ -206,10 +264,10 @@ export default function StartCallModal({ isOpen, onClose }) {
           <button
             type="submit"
             className="clb-btn clb-btn-primary"
-            disabled={submitting || availableMembers.length === 0}
+            disabled={submitting || selectedMemberIds.length === 0}
           >
-            <Plus size={15} />
-            {submitting ? 'Connecting...' : 'Start Call'}
+            {isGroupCall ? <Users size={15} /> : <Plus size={15} />}
+            {submitting ? 'Connecting...' : isGroupCall ? `Start Group Call (${selectedMemberIds.length})` : 'Start Call'}
           </button>
         </div>
       </form>

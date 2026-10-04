@@ -25,6 +25,26 @@ const formatTimeAgo = (date) => {
 };
 
 /**
+ * Format user object safely
+ */
+const formatUserObj = (u, fallbackName = "User") => {
+  if (!u) return { id: null, _id: null, name: fallbackName };
+  const id = u._id ? u._id.toString() : (u.id || u.toString());
+  if (typeof u === "object" && u.name) {
+    return {
+      id,
+      _id: id,
+      name: u.name,
+      username: u.username || "",
+      email: u.email,
+      avatar: u.avatar || null,
+      avatarColor: u.avatarColor || "#00E5A3",
+    };
+  }
+  return { id, _id: id, name: fallbackName };
+};
+
+/**
  * Format call document for API and Socket responses
  */
 const formatCall = (call) => {
@@ -33,29 +53,16 @@ const formatCall = (call) => {
   const callerId = c.caller ? (c.caller._id ? c.caller._id.toString() : c.caller.toString()) : null;
   const receiverId = c.receiver ? (c.receiver._id ? c.receiver._id.toString() : c.receiver.toString()) : null;
 
-  const callerObj =
-    c.caller && typeof c.caller === "object" && c.caller.name
-      ? {
-          id: callerId,
-          _id: callerId,
-          name: c.caller.name,
-          email: c.caller.email,
-          avatar: c.caller.avatar,
-          avatarColor: c.caller.avatarColor || "#00E5A3",
-        }
-      : { id: callerId, _id: callerId, name: "Caller" };
+  const callerObj = formatUserObj(c.caller, "Caller");
+  const receiverObj = c.receiver ? formatUserObj(c.receiver, "Receiver") : null;
 
-  const receiverObj =
-    c.receiver && typeof c.receiver === "object" && c.receiver.name
-      ? {
-          id: receiverId,
-          _id: receiverId,
-          name: c.receiver.name,
-          email: c.receiver.email,
-          avatar: c.receiver.avatar,
-          avatarColor: c.receiver.avatarColor || "#8B5CF6",
-        }
-      : { id: receiverId, _id: receiverId, name: "Receiver" };
+  const participantsList = Array.isArray(c.participants)
+    ? c.participants.map((p) => formatUserObj(p, "Participant"))
+    : [];
+
+  const acceptedParticipantsList = Array.isArray(c.acceptedParticipants)
+    ? c.acceptedParticipants.map((p) => formatUserObj(p, "Participant"))
+    : [];
 
   const typeLower = (c.type || "VIDEO").toLowerCase() === "audio" ? "voice" : "video";
   const statusLower =
@@ -65,22 +72,38 @@ const formatCall = (call) => {
       ? "ended"
       : c.status.toLowerCase();
 
-  const participantIds = [callerId, receiverId].filter(Boolean);
+  // All active and invited participant IDs
+  const allParticipantIds = new Set();
+  if (callerId) allParticipantIds.add(callerId);
+  if (receiverId) allParticipantIds.add(receiverId);
+  if (Array.isArray(c.participants)) {
+    c.participants.forEach((p) => {
+      const pid = p._id ? p._id.toString() : p.toString();
+      if (pid) allParticipantIds.add(pid);
+    });
+  }
+
+  const participantIds = Array.from(allParticipantIds);
+
+  const isGroup = Boolean(c.isGroup || (c.participants && c.participants.length > 1));
 
   return {
     id: c._id ? c._id.toString() : c.id,
     _id: c._id ? c._id.toString() : c.id,
     projectId: c.project ? (c.project._id ? c.project._id.toString() : c.project.toString()) : null,
     project: c.project,
-    title: c.title || `${typeLower === "video" ? "Video" : "Voice"} Call`,
+    title: c.title || (isGroup ? `Group ${typeLower === "video" ? "Video" : "Voice"} Call` : `${typeLower === "video" ? "Video" : "Voice"} Call`),
     type: typeLower,
     rawType: c.type,
+    isGroup,
     status: statusLower,
     rawStatus: c.status,
     callerId,
     caller: callerObj,
     receiverId,
     receiver: receiverObj,
+    participants: participantsList,
+    acceptedParticipants: acceptedParticipantsList,
     hostId: callerId,
     participantIds,
     startedAt: formatTimeAgo(c.startedAt || c.createdAt),
@@ -97,60 +120,76 @@ const formatCall = (call) => {
 
 /**
  * Start a new call (POST /api/projects/:projectId/calls)
+ * Supports 1-on-1 calls (receiverId) and Group calls (participantIds, isGroup: true)
  */
-const createCall = async ({ projectId, callerId, receiverId, type = "VIDEO", title = "" }) => {
-  if (!receiverId || !mongoose.Types.ObjectId.isValid(receiverId)) {
-    const error = new Error("Valid receiver ID is required");
-    error.statusCode = 400;
-    throw error;
+const createCall = async (arg1, arg2, arg3) => {
+  let params = {};
+  if (arg1 && typeof arg1 === "object" && !arg2) {
+    params = arg1;
+  } else {
+    params = {
+      projectId: arg1,
+      callerId: arg2,
+      ...(arg3 || {}),
+    };
   }
 
-  const callerIdStr = callerId.toString();
-  const receiverIdStr = receiverId.toString();
-
-  if (callerIdStr === receiverIdStr) {
-    const error = new Error("You cannot start a call with yourself");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  // Verify receiver is an active member in project
-  const receiverMembership = await ProjectMembership.findOne({
-    project: projectId,
-    user: receiverId,
-    status: "ACTIVE",
-  });
-
-  if (!receiverMembership) {
-    const error = new Error("Receiver is not an active member of this project");
-    error.statusCode = 403;
-    throw error;
-  }
-
-  // Check if receiver is already in an ongoing call
-  const activeOngoing = await Call.findOne({
-    project: projectId,
-    status: "ONGOING",
-    $or: [{ caller: receiverId }, { receiver: receiverId }],
-  });
-
-  if (activeOngoing) {
-    const error = new Error("User is currently busy in another call");
-    error.statusCode = 409;
-    error.code = "USER_BUSY";
-    throw error;
-  }
+  const { projectId, callerId, receiverId, participantIds = [], isGroup = false, type = "VIDEO", title = "" } = params;
+  const callerIdStr = callerId ? callerId.toString() : "";
 
   const normalizedType = (type || "VIDEO").toUpperCase() === "AUDIO" || (type || "").toLowerCase() === "voice"
     ? "AUDIO"
     : "VIDEO";
 
-  const defaultTitle = `${normalizedType === "VIDEO" ? "Video" : "Voice"} Call`;
+  let targetParticipantIds = [];
+  let isGroupCall = isGroup;
+
+  if (Array.isArray(participantIds) && participantIds.length > 0) {
+    targetParticipantIds = participantIds.map((id) => id.toString()).filter((id) => id !== callerIdStr);
+    if (targetParticipantIds.length > 1) {
+      isGroupCall = true;
+    }
+  }
+
+  if (receiverId) {
+    const recStr = receiverId.toString();
+    if (recStr !== callerIdStr && !targetParticipantIds.includes(recStr)) {
+      targetParticipantIds.push(recStr);
+    }
+  }
+
+  if (targetParticipantIds.length === 0) {
+    const error = new Error("Please select at least one teammate to call");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Validate all invited participants are active members in project
+  const memberRecords = await ProjectMembership.find({
+    project: projectId,
+    user: { $in: targetParticipantIds },
+    status: "ACTIVE",
+  });
+
+  if (memberRecords.length !== targetParticipantIds.length) {
+    const error = new Error("One or more selected participants are not active members of this project");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const defaultTitle = isGroupCall
+    ? `Group ${normalizedType === "VIDEO" ? "Video" : "Voice"} Call`
+    : `${normalizedType === "VIDEO" ? "Video" : "Voice"} Call`;
+
+  const primaryReceiver = isGroupCall ? null : targetParticipantIds[0];
 
   const newCall = await Call.create({
     project: projectId,
     caller: callerId,
-    receiver: receiverId,
+    receiver: primaryReceiver,
+    isGroup: isGroupCall,
+    participants: targetParticipantIds,
+    acceptedParticipants: [callerId],
     title: (title || "").trim() || defaultTitle,
     type: normalizedType,
     status: "RINGING",
@@ -160,22 +199,27 @@ const createCall = async ({ projectId, callerId, receiverId, type = "VIDEO", tit
   await newCall.populate([
     { path: "caller", select: "name email avatar avatarColor" },
     { path: "receiver", select: "name email avatar avatarColor" },
+    { path: "participants", select: "name email avatar avatarColor" },
+    { path: "acceptedParticipants", select: "name email avatar avatarColor" },
     { path: "project", select: "name description" },
   ]);
 
   const formatted = formatCall(newCall);
 
-  // Emit real-time call:incoming to receiver private room
+  // Emit real-time call:incoming to all invited participants
   try {
     const io = getIO();
     if (io) {
-      io.to(`user:${receiverIdStr}`).emit("call:incoming", {
-        callId: formatted.id,
-        call: formatted,
-        caller: formatted.caller,
-        type: formatted.type,
-        projectId: formatted.projectId,
-        title: formatted.title,
+      targetParticipantIds.forEach((pId) => {
+        io.to(`user:${pId}`).emit("call:incoming", {
+          callId: formatted.id,
+          call: formatted,
+          caller: formatted.caller,
+          type: formatted.type,
+          isGroup: formatted.isGroup,
+          projectId: formatted.projectId,
+          title: formatted.title,
+        });
       });
     }
   } catch (err) {
@@ -191,7 +235,12 @@ const createCall = async ({ projectId, callerId, receiverId, type = "VIDEO", tit
 const getCalls = async (projectId, userId, query = {}) => {
   const filter = {
     project: projectId,
-    $or: [{ caller: userId }, { receiver: userId }],
+    $or: [
+      { caller: userId },
+      { receiver: userId },
+      { participants: userId },
+      { acceptedParticipants: userId },
+    ],
   };
 
   const page = Math.max(1, parseInt(query.page, 10) || 1);
@@ -201,6 +250,8 @@ const getCalls = async (projectId, userId, query = {}) => {
   const calls = await Call.find(filter)
     .populate("caller", "name email avatar avatarColor")
     .populate("receiver", "name email avatar avatarColor")
+    .populate("participants", "name email avatar avatarColor")
+    .populate("acceptedParticipants", "name email avatar avatarColor")
     .populate("project", "name description")
     .sort({ createdAt: -1 })
     .skip(skip)
@@ -221,6 +272,8 @@ const getCallById = async (callId, projectId = null, userId = null) => {
   const call = await Call.findOne(query)
     .populate("caller", "name email avatar avatarColor")
     .populate("receiver", "name email avatar avatarColor")
+    .populate("participants", "name email avatar avatarColor")
+    .populate("acceptedParticipants", "name email avatar avatarColor")
     .populate("project", "name description");
 
   if (!call) return null;
@@ -241,6 +294,8 @@ const acceptCall = async (callId, userId) => {
   const call = await Call.findById(callId).populate([
     { path: "caller", select: "name email avatar avatarColor" },
     { path: "receiver", select: "name email avatar avatarColor" },
+    { path: "participants", select: "name email avatar avatarColor" },
+    { path: "acceptedParticipants", select: "name email avatar avatarColor" },
     { path: "project", select: "name description" },
   ]);
 
@@ -250,31 +305,73 @@ const acceptCall = async (callId, userId) => {
     throw error;
   }
 
-  if (call.receiver._id.toString() !== userId.toString()) {
-    const error = new Error("Only the call receiver can accept this call");
+  const userIdStr = userId.toString();
+  const callerIdStr = call.caller ? (call.caller._id ? call.caller._id.toString() : call.caller.toString()) : "";
+  const receiverIdStr = call.receiver ? (call.receiver._id ? call.receiver._id.toString() : call.receiver.toString()) : "";
+  const participantIds = Array.isArray(call.participants)
+    ? call.participants.map((p) => (p._id ? p._id.toString() : p.toString()))
+    : [];
+
+  const isAllowed =
+    receiverIdStr === userIdStr ||
+    participantIds.includes(userIdStr) ||
+    callerIdStr === userIdStr;
+
+  if (!isAllowed) {
+    const error = new Error("You are not authorized to join this call");
     error.statusCode = 403;
     throw error;
   }
 
-  if (call.status !== "RINGING") {
-    const error = new Error(`Call cannot be accepted because it is already ${call.status.toLowerCase()}`);
+  if (call.status === "COMPLETED" || call.status === "CANCELLED" || call.status === "DECLINED") {
+    const error = new Error(`Call cannot be joined because it is ${call.status.toLowerCase()}`);
     error.statusCode = 400;
     throw error;
   }
 
   call.status = "ONGOING";
-  call.answeredAt = new Date();
+  if (!call.answeredAt) {
+    call.answeredAt = new Date();
+  }
+
+  if (!call.acceptedParticipants.some((p) => (p._id ? p._id.toString() : p.toString()) === userIdStr)) {
+    call.acceptedParticipants.push(userId);
+  }
+
   await call.save();
+
+  await call.populate([
+    { path: "caller", select: "name email avatar avatarColor" },
+    { path: "receiver", select: "name email avatar avatarColor" },
+    { path: "participants", select: "name email avatar avatarColor" },
+    { path: "acceptedParticipants", select: "name email avatar avatarColor" },
+    { path: "project", select: "name description" },
+  ]);
 
   const formatted = formatCall(call);
 
-  // Notify caller
+  // Notify other participants that user accepted/joined
   try {
     const io = getIO();
     if (io) {
-      io.to(`user:${call.caller._id.toString()}`).emit("call:accepted", {
-        callId: formatted.id,
-        call: formatted,
+      // Notify caller
+      if (callerIdStr && callerIdStr !== userIdStr) {
+        io.to(`user:${callerIdStr}`).emit("call:accepted", {
+          callId: formatted.id,
+          call: formatted,
+          userId: userIdStr,
+        });
+      }
+
+      // Notify all active accepted participants
+      formatted.participantIds.forEach((pId) => {
+        if (pId !== userIdStr) {
+          io.to(`user:${pId}`).emit("call:participant-joined", {
+            callId: formatted.id,
+            call: formatted,
+            userId: userIdStr,
+          });
+        }
       });
     }
   } catch (err) {
@@ -294,33 +391,33 @@ const rejectCall = async (callId, userId) => {
     throw error;
   }
 
-  const call = await Call.findById(callId).populate("caller receiver project");
+  const call = await Call.findById(callId).populate("caller receiver participants project");
   if (!call) {
     const error = new Error("Call not found");
     error.statusCode = 404;
     throw error;
   }
 
-  if (call.receiver._id.toString() !== userId.toString()) {
-    const error = new Error("Only the call receiver can reject this call");
-    error.statusCode = 403;
-    throw error;
-  }
+  const userIdStr = userId.toString();
+  const callerIdStr = call.caller ? (call.caller._id ? call.caller._id.toString() : call.caller.toString()) : "";
 
-  call.status = "DECLINED";
-  call.endedAt = new Date();
-  call.endReason = "DECLINED";
-  await call.save();
+  if (!call.isGroup) {
+    call.status = "DECLINED";
+    call.endedAt = new Date();
+    call.endReason = "DECLINED";
+    await call.save();
+  }
 
   const formatted = formatCall(call);
 
   // Notify caller
   try {
     const io = getIO();
-    if (io) {
-      io.to(`user:${call.caller._id.toString()}`).emit("call:rejected", {
+    if (io && callerIdStr) {
+      io.to(`user:${callerIdStr}`).emit("call:rejected", {
         callId: formatted.id,
         call: formatted,
+        rejectedBy: userIdStr,
       });
     }
   } catch (err) {
@@ -340,14 +437,16 @@ const cancelCall = async (callId, userId) => {
     throw error;
   }
 
-  const call = await Call.findById(callId).populate("caller receiver project");
+  const call = await Call.findById(callId).populate("caller receiver participants project");
   if (!call) {
     const error = new Error("Call not found");
     error.statusCode = 404;
     throw error;
   }
 
-  if (call.caller._id.toString() !== userId.toString()) {
+  const callerIdStr = call.caller ? (call.caller._id ? call.caller._id.toString() : call.caller.toString()) : "";
+
+  if (callerIdStr !== userId.toString()) {
     const error = new Error("Only the caller can cancel this call");
     error.statusCode = 403;
     throw error;
@@ -360,17 +459,91 @@ const cancelCall = async (callId, userId) => {
 
   const formatted = formatCall(call);
 
-  // Notify receiver
+  // Notify all invited participants
   try {
     const io = getIO();
     if (io) {
-      io.to(`user:${call.receiver._id.toString()}`).emit("call:cancelled", {
-        callId: formatted.id,
-        call: formatted,
+      formatted.participantIds.forEach((pId) => {
+        if (pId !== callerIdStr) {
+          io.to(`user:${pId}`).emit("call:cancelled", {
+            callId: formatted.id,
+            call: formatted,
+          });
+        }
       });
     }
   } catch (err) {
     console.warn("Socket call:cancelled emit warning:", err.message);
+  }
+
+  return formatted;
+};
+
+/**
+ * User leaves an active call
+ */
+const leaveCall = async (callId, userId) => {
+  if (!mongoose.Types.ObjectId.isValid(callId)) {
+    const error = new Error("Invalid call ID");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const call = await Call.findById(callId).populate("caller receiver participants acceptedParticipants project");
+  if (!call) {
+    const error = new Error("Call not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const userIdStr = userId.toString();
+
+  // Remove from acceptedParticipants
+  call.acceptedParticipants = (call.acceptedParticipants || []).filter(
+    (p) => (p._id ? p._id.toString() : p.toString()) !== userIdStr
+  );
+
+  // If 1-on-1 or if fewer than 2 participants remain in a group call, complete the call
+  if (!call.isGroup || call.acceptedParticipants.length <= 1) {
+    const now = new Date();
+    let duration = 0;
+    if (call.answeredAt) {
+      duration = Math.max(0, Math.round((now - call.answeredAt) / 1000));
+    }
+    call.status = "COMPLETED";
+    call.endedAt = now;
+    call.duration = duration;
+    call.endReason = "NORMAL";
+  }
+
+  await call.save();
+
+  const formatted = formatCall(call);
+
+  // Broadcast participant-left or call:ended
+  try {
+    const io = getIO();
+    if (io) {
+      if (call.status === "COMPLETED") {
+        formatted.participantIds.forEach((pId) => {
+          io.to(`user:${pId}`).emit("call:ended", {
+            callId: formatted.id,
+            call: formatted,
+            endedBy: userIdStr,
+          });
+        });
+      } else {
+        formatted.participantIds.forEach((pId) => {
+          io.to(`user:${pId}`).emit("call:participant-left", {
+            callId: formatted.id,
+            call: formatted,
+            userId: userIdStr,
+          });
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("Socket call:participant-left emit warning:", err.message);
   }
 
   return formatted;
@@ -386,18 +559,26 @@ const endCall = async (callId, userId) => {
     throw error;
   }
 
-  const call = await Call.findById(callId).populate("caller receiver project");
+  const call = await Call.findById(callId).populate("caller receiver participants acceptedParticipants project");
   if (!call) {
     const error = new Error("Call not found");
     error.statusCode = 404;
     throw error;
   }
 
-  const callerIdStr = call.caller._id.toString();
-  const receiverIdStr = call.receiver._id.toString();
   const userIdStr = userId.toString();
+  const callerIdStr = call.caller ? (call.caller._id ? call.caller._id.toString() : call.caller.toString()) : "";
+  const receiverIdStr = call.receiver ? (call.receiver._id ? call.receiver._id.toString() : call.receiver.toString()) : "";
+  const participantIds = Array.isArray(call.participants)
+    ? call.participants.map((p) => (p._id ? p._id.toString() : p.toString()))
+    : [];
 
-  if (callerIdStr !== userIdStr && receiverIdStr !== userIdStr) {
+  const isParticipant =
+    callerIdStr === userIdStr ||
+    receiverIdStr === userIdStr ||
+    participantIds.includes(userIdStr);
+
+  if (!isParticipant) {
     const error = new Error("You are not a participant in this call");
     error.statusCode = 403;
     throw error;
@@ -419,17 +600,18 @@ const endCall = async (callId, userId) => {
   call.endReason = "NORMAL";
   await call.save();
 
-  const otherParticipantId = callerIdStr === userIdStr ? receiverIdStr : callerIdStr;
   const formatted = formatCall(call);
 
-  // Notify other participant
+  // Notify all participants
   try {
     const io = getIO();
     if (io) {
-      io.to(`user:${otherParticipantId}`).emit("call:ended", {
-        callId: formatted.id,
-        call: formatted,
-        endedBy: userIdStr,
+      formatted.participantIds.forEach((pId) => {
+        io.to(`user:${pId}`).emit("call:ended", {
+          callId: formatted.id,
+          call: formatted,
+          endedBy: userIdStr,
+        });
       });
     }
   } catch (err) {
@@ -447,5 +629,6 @@ module.exports = {
   acceptCall,
   rejectCall,
   cancelCall,
+  leaveCall,
   endCall,
 };

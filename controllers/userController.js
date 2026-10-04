@@ -1,9 +1,10 @@
 const mongoose = require("mongoose");
 const User = require("../models/User");
+const Project = require("../models/Project");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 
 /**
- * Format public safe user profile
+ * Format public safe user profile (strictly excluding passwords, tokens, private fields)
  */
 const formatPublicUser = (user) => {
   return {
@@ -11,13 +12,13 @@ const formatPublicUser = (user) => {
     id: user._id.toString(),
     name: user.name,
     username: user.username || (user.email ? user.email.split("@")[0].toLowerCase() : ""),
-    email: user.email,
     avatar: user.avatar || null,
     avatarColor: user.avatarColor || "#14b8a6",
     bio: user.bio || "",
     skills: user.skills || [],
     isOnline: user.isOnline || false,
     lastSeen: user.lastSeen || new Date(),
+    createdAt: user.createdAt,
   };
 };
 
@@ -36,24 +37,67 @@ const searchUsers = async (req, res, next) => {
     const cleanQuery = rawQuery.replace(/^@/, "").toLowerCase();
     const regex = new RegExp(cleanQuery, "i");
 
-    const currentUserId = req.user._id || req.user.id;
+    const currentUserId = req.user ? (req.user._id || req.user.id) : null;
 
-    // Search matching users excluding current user
-    const users = await User.find({
-      _id: { $ne: currentUserId },
+    const filter = {
       $or: [
         { username: regex },
         { name: regex },
-        { email: regex },
       ],
-    })
-      .select("name username email avatar avatarColor bio skills isOnline lastSeen")
+    };
+
+    if (currentUserId) {
+      filter._id = { $ne: currentUserId };
+    }
+
+    const users = await User.find(filter)
+      .select("name username avatar avatarColor bio skills isOnline lastSeen createdAt")
       .limit(20)
       .lean();
 
     const formatted = users.map(formatPublicUser);
 
     return sendSuccess(res, { users: formatted, count: formatted.length });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get public profile and public repositories by username
+ * Route: GET /api/users/profile/:username
+ */
+const getPublicUserProfile = async (req, res, next) => {
+  try {
+    const { username } = req.params;
+    const cleanUsername = (username || "").trim().toLowerCase().replace(/^@/, "");
+
+    const user = await User.findOne({
+      $or: [
+        { username: cleanUsername },
+        ...(mongoose.Types.ObjectId.isValid(username) ? [{ _id: username }] : []),
+      ],
+    }).select("name username bio skills avatar avatarColor isOnline lastSeen createdAt");
+
+    if (!user) {
+      return sendError(res, "User not found", 404);
+    }
+
+    // Fetch user's public repositories / projects
+    const publicProjects = await Project.find({
+      owner: user._id,
+      visibility: { $in: ["public", "PUBLIC"] },
+    })
+      .select("name displayName slug description language technologies status stars defaultBranch createdAt updatedAt")
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    return sendSuccess(res, {
+      user: formatPublicUser(user),
+      publicProjects,
+      publicRepositories: publicProjects,
+      count: publicProjects.length,
+    });
   } catch (error) {
     next(error);
   }
@@ -193,6 +237,7 @@ const getUserByIdOrUsername = async (req, res, next) => {
 
 module.exports = {
   searchUsers,
+  getPublicUserProfile,
   getMyProfile,
   updateMyProfile,
   getUserByIdOrUsername,

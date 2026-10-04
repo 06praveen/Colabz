@@ -3,6 +3,8 @@ const {
   startCall,
   getCalls,
   getCallById,
+  leaveCall,
+  endCall,
 } = require("../controllers/callController");
 const protect = require("../middleware/authMiddleware");
 const { requireProjectMember } = require("../middleware/membershipMiddleware");
@@ -16,5 +18,7 @@ router.use(requireProjectMember);
 router.post("/", startCall);
 router.get("/", getCalls);
 router.get("/:callId", getCallById);
+router.post("/:callId/leave", leaveCall);
+router.post("/:callId/end", endCall);
 
 module.exports = router;

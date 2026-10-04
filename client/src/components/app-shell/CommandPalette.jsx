@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, FolderGit2, MessageSquare, Bell, Settings, LayoutDashboard, Plus, GitBranch, GitCommit, FileCode, CheckSquare, CircleDot, Users, UserPlus, Hash, Video, Mic } from 'lucide-react';
+import api from '../../services/api';
+import Avatar from '../ui/Avatar';
+import { Search, FolderGit2, MessageSquare, Bell, Settings, LayoutDashboard, Plus, GitBranch, GitCommit, FileCode, CheckSquare, CircleDot, Users, UserPlus, Hash, Video, Mic, User } from 'lucide-react';
 
 export default function CommandPalette({ isOpen, onClose, onCreateProject }) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [userResults, setUserResults] = useState([]);
   const navigate = useNavigate();
   const inputRef = useRef(null);
 
@@ -22,7 +25,7 @@ export default function CommandPalette({ isOpen, onClose, onCreateProject }) {
     { id: 'repo-commits', label: 'View commits history', category: 'Repository', icon: GitCommit, path: '/app/projects/proj_1/repository/commits' },
     { id: 'repo-branches', label: 'Go to branches list', category: 'Repository', icon: GitBranch, path: '/app/projects/proj_1/repository/branches' },
 
-    // Tasks & Issues Commands (Phase 7)
+    // Tasks & Issues Commands
     { id: 'task-go', label: 'Go to Tasks', category: 'Tasks & Issues', icon: CheckSquare, path: '/app/projects/proj_1/tasks' },
     { id: 'task-search', label: 'Search tasks', category: 'Tasks & Issues', icon: Search, path: '/app/projects/proj_1/tasks' },
     { id: 'task-create', label: 'Create new task', category: 'Tasks & Issues', icon: Plus, path: '/app/projects/proj_1/tasks' },
@@ -30,47 +33,71 @@ export default function CommandPalette({ isOpen, onClose, onCreateProject }) {
     { id: 'issue-search', label: 'Search issues', category: 'Tasks & Issues', icon: Search, path: '/app/projects/proj_1/issues' },
     { id: 'issue-create', label: 'Create new issue', category: 'Tasks & Issues', icon: Plus, path: '/app/projects/proj_1/issues' },
 
-    // Members & Team Commands (Phase 8)
+    // Members & Team Commands
     { id: 'member-go', label: 'Go to Members', category: 'Members', icon: Users, path: '/app/projects/proj_1/members' },
     { id: 'member-invite', label: 'Invite member', category: 'Members', icon: UserPlus, path: '/app/projects/proj_1/members?action=invite' },
     { id: 'member-search', label: 'Search members', category: 'Members', icon: Search, path: '/app/projects/proj_1/members' },
 
-    // Chat & Messaging Commands (Phase 9)
+    // Chat & Messaging Commands
     { id: 'chat-go', label: 'Go to Chat', category: 'Chat & Messaging', icon: MessageSquare, path: '/app/projects/proj_1/chat' },
     { id: 'chat-search', label: 'Search messages', category: 'Chat & Messaging', icon: Search, path: '/app/projects/proj_1/chat' },
     { id: 'chat-start', label: 'Start conversation', category: 'Chat & Messaging', icon: Plus, path: '/app/projects/proj_1/chat' },
-    { id: 'chat-open-general', label: 'Open General', category: 'Chat & Messaging', icon: Hash, path: '/app/projects/proj_1/chat/conv_general' },
-    { id: 'chat-open-dev', label: 'Open Development', category: 'Chat & Messaging', icon: Hash, path: '/app/projects/proj_1/chat/conv_dev' },
 
-    // Calls & Real-Time Commands (Phase 10)
+    // Calls & Real-Time Commands
     { id: 'call-go', label: 'Go to Calls', category: 'Calls & Real-Time', icon: Video, path: '/app/projects/proj_1/calls' },
-    { id: 'call-start-video', label: 'Start video call', category: 'Calls & Real-Time', icon: Video, path: '/app/projects/proj_1/calls/call_dev_sync' },
+    { id: 'call-start-video', label: 'Start video call', category: 'Calls & Real-Time', icon: Video, path: '/app/projects/proj_1/calls' },
     { id: 'call-start-voice', label: 'Start voice call', category: 'Calls & Real-Time', icon: Mic, path: '/app/projects/proj_1/calls' },
-    { id: 'call-join', label: 'Join active call', category: 'Calls & Real-Time', icon: Video, path: '/app/projects/proj_1/calls/call_dev_sync' },
-    { id: 'call-chat', label: 'Open call chat', category: 'Calls & Real-Time', icon: MessageSquare, path: '/app/projects/proj_1/calls/call_dev_sync' },
 
-    // Notifications & Activity Commands (Phase 11)
+    // Notifications & Activity Commands
     { id: 'notif-go', label: 'Go to Notifications', category: 'Notifications & Activity', icon: Bell, path: '/app/notifications' },
     { id: 'activity-go', label: 'Go to Activity Center', category: 'Notifications & Activity', icon: LayoutDashboard, path: '/app/activity' },
-    { id: 'notif-mark-read', label: 'Mark all notifications as read', category: 'Notifications & Activity', icon: Bell, path: '/app/notifications' },
-    { id: 'activity-search', label: 'Search activity timeline', category: 'Notifications & Activity', icon: Search, path: '/app/activity' },
-
-    { id: 'proj-campus', label: 'campus-connect', category: 'Recent projects', icon: FolderGit2, path: '/app/projects/proj_1/repository' },
-    { id: 'proj-ai', label: 'ai-stock-predictor', category: 'Recent projects', icon: FolderGit2, path: '/app/projects/proj_2/repository' },
-    { id: 'proj-student', label: 'student-management', category: 'Recent projects', icon: FolderGit2, path: '/app/projects/proj_3/repository' },
 
     { id: 'act-create-proj', label: 'Create new project', category: 'Actions', icon: Plus, action: 'CREATE_PROJECT' }
   ];
 
-  const filteredItems = commandItems.filter(item =>
+  // Fetch users when searching
+  useEffect(() => {
+    if (!query || query.trim().length < 1) {
+      setUserResults([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const cleanQ = query.trim().replace(/^@/, '');
+        const res = await api.get(`/users/search?username=${encodeURIComponent(cleanQ)}`);
+        if (res.data?.success && res.data.data?.users) {
+          const mapped = res.data.data.users.map((u) => ({
+            id: `user-${u.username || u._id}`,
+            label: `${u.name} (@${u.username})`,
+            username: u.username,
+            avatar: u.avatar,
+            category: 'Users & Profiles',
+            icon: User,
+            path: `/users/${u.username}`,
+          }));
+          setUserResults(mapped);
+        }
+      } catch (err) {
+        // search failure ignored in palette
+      }
+    }, 180);
+
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const filteredCommandItems = commandItems.filter(item =>
     item.label.toLowerCase().includes(query.toLowerCase()) ||
     item.category.toLowerCase().includes(query.toLowerCase())
   );
+
+  const allFilteredItems = [...userResults, ...filteredCommandItems];
 
   useEffect(() => {
     if (isOpen) {
       setQuery('');
       setSelectedIndex(0);
+      setUserResults([]);
       setTimeout(() => {
         if (inputRef.current) inputRef.current.focus();
       }, 50);
@@ -83,14 +110,14 @@ export default function CommandPalette({ isOpen, onClose, onCreateProject }) {
 
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setSelectedIndex((prev) => (prev + 1) % (filteredItems.length || 1));
+        setSelectedIndex((prev) => (prev + 1) % (allFilteredItems.length || 1));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSelectedIndex((prev) => (prev - 1 + filteredItems.length) % (filteredItems.length || 1));
+        setSelectedIndex((prev) => (prev - 1 + allFilteredItems.length) % (allFilteredItems.length || 1));
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        if (filteredItems[selectedIndex]) {
-          handleExecute(filteredItems[selectedIndex]);
+        if (allFilteredItems[selectedIndex]) {
+          handleExecute(allFilteredItems[selectedIndex]);
         }
       } else if (e.key === 'Escape') {
         onClose();
@@ -99,7 +126,7 @@ export default function CommandPalette({ isOpen, onClose, onCreateProject }) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, filteredItems, selectedIndex]);
+  }, [isOpen, allFilteredItems, selectedIndex]);
 
   const handleExecute = (item) => {
     onClose();
@@ -215,7 +242,7 @@ export default function CommandPalette({ isOpen, onClose, onCreateProject }) {
                 padding: '0.4rem'
               }}
             >
-              {filteredItems.length === 0 ? (
+              {allFilteredItems.length === 0 ? (
                 <div
                   style={{
                     padding: '2rem 1rem',
@@ -227,7 +254,7 @@ export default function CommandPalette({ isOpen, onClose, onCreateProject }) {
                   No matching results for "{query}"
                 </div>
               ) : (
-                filteredItems.map((item, idx) => {
+                allFilteredItems.map((item, idx) => {
                   const isSelected = idx === selectedIndex;
                   const Icon = item.icon;
                   return (
@@ -248,7 +275,11 @@ export default function CommandPalette({ isOpen, onClose, onCreateProject }) {
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                        <Icon size={16} color={isSelected ? 'var(--accent-primary)' : 'var(--text-muted)'} />
+                        {item.username ? (
+                          <Avatar name={item.label} src={item.avatar} size={22} />
+                        ) : (
+                          <Icon size={16} color={isSelected ? 'var(--accent-primary)' : 'var(--text-muted)'} />
+                        )}
                         <span style={{ fontSize: '0.85rem', fontWeight: isSelected ? 500 : 400 }}>
                           {item.label}
                         </span>

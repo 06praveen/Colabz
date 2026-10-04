@@ -166,7 +166,7 @@ const deleteFolder = async (req, res, next) => {
 };
 
 /**
- * Upload a file (multipart/form-data)
+ * Upload single or multiple files (multipart/form-data)
  * Route: POST /api/projects/:projectId/repository/upload
  */
 const uploadFile = async (req, res, next) => {
@@ -175,30 +175,52 @@ const uploadFile = async (req, res, next) => {
     const user = req.user;
     const role = (req.membership?.role || "VIEWER").toUpperCase();
 
-    if (!req.file && !req.body.fileName && !req.body.content) {
-      return sendError(res, "Please select a file to upload", 400);
+    const filesToUpload = req.files && req.files.length > 0
+      ? req.files
+      : req.file
+      ? [req.file]
+      : [];
+
+    if (filesToUpload.length === 0 && !req.body.fileName && !req.body.content) {
+      return sendError(res, "Please select at least one file to upload", 400);
     }
 
-    let fileName = "";
-    let content = "";
+    const uploadedFiles = [];
 
-    if (req.file) {
-      fileName = req.file.originalname;
-      content = req.file.buffer.toString("utf8");
+    if (filesToUpload.length > 0) {
+      for (const f of filesToUpload) {
+        const payload = {
+          fileName: f.originalname,
+          content: f.buffer.toString("utf8"),
+          parentPath: req.body.parentPath || "",
+          branch: req.body.branch || req.body.branchId || req.body.branchName,
+        };
+        const uploaded = await repositoryService.uploadFile(project, user, payload, role);
+        uploadedFiles.push(uploaded);
+      }
     } else {
-      fileName = req.body.fileName;
-      content = req.body.content || "";
+      const payload = {
+        fileName: req.body.fileName,
+        content: req.body.content || "",
+        parentPath: req.body.parentPath || "",
+        branch: req.body.branch || req.body.branchId || req.body.branchName,
+      };
+      const uploaded = await repositoryService.uploadFile(project, user, payload, role);
+      uploadedFiles.push(uploaded);
     }
 
-    const payload = {
-      fileName,
-      content,
-      parentPath: req.body.parentPath || "",
-      branch: req.body.branch || req.body.branchId || req.body.branchName,
-    };
-
-    const file = await repositoryService.uploadFile(project, user, payload, role);
-    return sendSuccess(res, { file }, 201, "File uploaded successfully");
+    return sendSuccess(
+      res,
+      {
+        file: uploadedFiles[0],
+        files: uploadedFiles,
+        count: uploadedFiles.length,
+      },
+      201,
+      uploadedFiles.length > 1
+        ? `${uploadedFiles.length} files uploaded successfully`
+        : "File uploaded successfully"
+    );
   } catch (error) {
     if (error.statusCode) {
       return sendError(res, error.message, error.statusCode);
