@@ -2,7 +2,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const DEFAULT_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
-const SYSTEM_INSTRUCTION = `You are the AI Coding Assistant integrated into CodeTogether, a developer platform combining GitHub repository collaboration with real-time team chat.
+const SYSTEM_INSTRUCTION = `You are the AI Coding Assistant integrated into Colabz, a collaborative developer workspace combining GitHub repository collaboration with real-time team chat, tasks, issues, and voice/video calling.
 
 Your role:
 - Provide clear, expert coding explanations and solutions.
@@ -130,7 +130,7 @@ const generateAiResponse = async ({
   // If no Gemini API key is configured yet, provide a clear, helpful response
   if (!apiKey || apiKey === "your_gemini_api_key_here" || apiKey.trim() === "") {
     return {
-      text: `### 💡 CodeTogether AI Assistant (Setup Notice)\n\n` +
+      text: `### 💡 Colabz AI Assistant (Setup Notice)\n\n` +
         `The AI assistant backend is **operational and ready**!\n\n` +
         `To enable live responses from Google Gemini:\n` +
         `1. Open the backend \`.env\` file.\n` +

@@ -1,115 +1,229 @@
-import { mockRepositories } from '../mock/repositories';
-import { mockFiles } from '../mock/files';
-import { mockCommits } from '../mock/commits';
-import { mockBranches } from '../mock/branches';
+import api from './api';
 
 export const repositoryService = {
-  // Fetch Repository Metadata
+  /**
+   * Fetch repository file tree for a project
+   * GET /api/projects/:projectId/repository/tree
+   */
+  async getFiles(projectId, branch) {
+    const params = {};
+    if (branch) params.branch = branch;
+    const res = await api.get(`/api/projects/${projectId}/repository/tree`, { params });
+    return res.data?.data?.files || [];
+  },
+
+  /**
+   * Fetch repository metadata (branch info + stats)
+   * GET /api/projects/:projectId/repository/tree
+   */
   async getRepository(projectId) {
-    const repo = mockRepositories.find((r) => r.projectId === projectId);
-    return repo || mockRepositories[0];
+    try {
+      const res = await api.get(`/api/projects/${projectId}/repository/tree`);
+      const data = res.data?.data || {};
+      return {
+        projectId,
+        defaultBranch: data.branch?.name || 'main',
+        branchId: data.branch?.id || null,
+      };
+    } catch {
+      return {
+        projectId,
+        defaultBranch: 'main',
+        branchId: null,
+      };
+    }
   },
 
-  // Get File Tree for project
-  async getFiles(projectId) {
-    return mockFiles[projectId] || mockFiles.proj_1;
-  },
-
-  // Get File by Path
-  async getFileByPath(projectId, pathStr) {
-    const files = mockFiles[projectId] || mockFiles.proj_1;
-    if (!pathStr || pathStr === '/') return null;
-
-    const findRecursive = (nodes, currentPath) => {
-      for (const node of nodes) {
-        if (node.path === currentPath) return node;
-        if (node.isFolder && node.children) {
-          const found = findRecursive(node.children, currentPath);
-          if (found) return found;
-        }
-      }
+  /**
+   * Get file by path
+   * GET /api/projects/:projectId/repository/file?path=...
+   */
+  async getFileByPath(projectId, filePath, branch) {
+    if (!filePath || filePath === '/') return null;
+    try {
+      const params = { path: filePath };
+      if (branch) params.branch = branch;
+      const res = await api.get(`/api/projects/${projectId}/repository/file`, { params });
+      return res.data?.data?.file || null;
+    } catch {
       return null;
-    };
-
-    return findRecursive(files, pathStr);
+    }
   },
 
-  // Get Branches List
+  /**
+   * Get file by ID
+   * GET /api/projects/:projectId/repository/files/:fileId
+   */
+  async getFileById(projectId, fileId) {
+    try {
+      const res = await api.get(`/api/projects/${projectId}/repository/files/${fileId}`);
+      return res.data?.data?.file || null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Get all branches for a project
+   * GET /api/projects/:projectId/branches
+   */
   async getBranches(projectId) {
-    return mockBranches[projectId] || mockBranches.proj_1;
+    try {
+      const res = await api.get(`/api/projects/${projectId}/branches`);
+      return res.data?.data?.branches || [];
+    } catch {
+      return [];
+    }
   },
 
-  // Get Commits Log
-  async getCommits(projectId) {
-    return mockCommits[projectId] || mockCommits.proj_1;
+  /**
+   * Get commit history for a project
+   * GET /api/projects/:projectId/commits
+   */
+  async getCommits(projectId, branch) {
+    try {
+      const params = {};
+      if (branch) params.branchId = branch;
+      const res = await api.get(`/api/projects/${projectId}/commits`, { params });
+      return res.data?.data?.commits || [];
+    } catch {
+      return [];
+    }
   },
 
-  // Get Single Commit Detail
+  /**
+   * Get single commit detail by ID
+   * GET /api/projects/:projectId/commits/:commitId
+   */
   async getCommitById(projectId, commitId) {
-    const commits = mockCommits[projectId] || mockCommits.proj_1;
-    return commits.find((c) => c.id === commitId || c.hash === commitId) || commits[0];
+    try {
+      const res = await api.get(`/api/projects/${projectId}/commits/${commitId}`);
+      return res.data?.data?.commit || null;
+    } catch {
+      return null;
+    }
   },
 
-  // Create File (Frontend State Mock)
+  /**
+   * Get commit history for a single file
+   * GET /api/projects/:projectId/repository/files/:fileId/history
+   */
+  async getFileHistory(projectId, fileId) {
+    try {
+      const res = await api.get(`/api/projects/${projectId}/repository/files/${fileId}/history`);
+      return res.data?.data?.commits || [];
+    } catch {
+      return [];
+    }
+  },
+
+  /**
+   * Create a new file
+   * POST /api/projects/:projectId/repository/files
+   */
   async createFile(projectId, parentPath, fileName, content = '') {
-    const files = mockFiles[projectId] || mockFiles.proj_1;
-    const newPath = parentPath ? `${parentPath}/${fileName}` : fileName;
-    const ext = fileName.split('.').pop();
-
-    const newFileNode = {
-      id: `f_${Date.now()}`,
-      name: fileName,
-      path: newPath,
-      isFolder: false,
-      commitMessage: `create ${fileName}`,
-      updatedAt: 'Just now',
-      size: `${content.length} B`,
-      language: ext,
-      content: content || `// ${fileName}\n\nexport default function ${fileName.split('.')[0]}() {\n  return null;\n}`
-    };
-
-    if (!parentPath) {
-      files.unshift(newFileNode);
-    } else {
-      const parentFolder = await this.getFileByPath(projectId, parentPath);
-      if (parentFolder && parentFolder.isFolder) {
-        if (!parentFolder.children) parentFolder.children = [];
-        parentFolder.children.unshift(newFileNode);
-      } else {
-        files.unshift(newFileNode);
-      }
-    }
-
-    return newFileNode;
+    const res = await api.post(`/api/projects/${projectId}/repository/files`, {
+      parentPath,
+      fileName,
+      content,
+    });
+    return res.data?.data?.file || res.data?.data;
   },
 
-  // Create Folder (Frontend State Mock)
+  /**
+   * Create a new folder
+   * POST /api/projects/:projectId/repository/folders
+   */
   async createFolder(projectId, parentPath, folderName) {
-    const files = mockFiles[projectId] || mockFiles.proj_1;
-    const newPath = parentPath ? `${parentPath}/${folderName}` : folderName;
+    const res = await api.post(`/api/projects/${projectId}/repository/folders`, {
+      parentPath,
+      folderName,
+    });
+    return res.data?.data?.folder || res.data?.data;
+  },
 
-    const newFolderNode = {
-      id: `f_dir_${Date.now()}`,
-      name: folderName,
-      path: newPath,
-      isFolder: true,
-      commitMessage: `create directory ${folderName}`,
-      updatedAt: 'Just now',
-      children: []
-    };
+  /**
+   * Update a file (content, rename)
+   * PATCH /api/projects/:projectId/repository/files/:fileId
+   */
+  async updateFile(projectId, fileId, updates) {
+    const res = await api.patch(`/api/projects/${projectId}/repository/files/${fileId}`, updates);
+    return res.data?.data?.file || res.data?.data;
+  },
 
-    if (!parentPath) {
-      files.unshift(newFolderNode);
-    } else {
-      const parentFolder = await this.getFileByPath(projectId, parentPath);
-      if (parentFolder && parentFolder.isFolder) {
-        if (!parentFolder.children) parentFolder.children = [];
-        parentFolder.unshift(newFolderNode);
-      } else {
-        files.unshift(newFolderNode);
-      }
-    }
+  /**
+   * Delete a file
+   * DELETE /api/projects/:projectId/repository/files/:fileId
+   */
+  async deleteFile(projectId, fileId) {
+    const res = await api.delete(`/api/projects/${projectId}/repository/files/${fileId}`);
+    return res.data;
+  },
 
-    return newFolderNode;
-  }
+  /**
+   * Delete a folder and all children
+   * DELETE /api/projects/:projectId/repository/folders
+   */
+  async deleteFolder(projectId, folderPath, branchId) {
+    const res = await api.delete(`/api/projects/${projectId}/repository/folders`, {
+      data: { path: folderPath, branchId },
+    });
+    return res.data;
+  },
+
+  /**
+   * Create a new branch
+   * POST /api/projects/:projectId/branches
+   */
+  async createBranch(projectId, name, sourceBranchName) {
+    const res = await api.post(`/api/projects/${projectId}/branches`, {
+      name,
+      sourceBranchName,
+    });
+    return res.data?.data?.branch || res.data?.data;
+  },
+
+  /**
+   * Rename a branch
+   * PATCH /api/projects/:projectId/branches/:branchId
+   */
+  async renameBranch(projectId, branchId, name) {
+    const res = await api.patch(`/api/projects/${projectId}/branches/${branchId}`, { name });
+    return res.data?.data?.branch || res.data?.data;
+  },
+
+  /**
+   * Delete a branch
+   * DELETE /api/projects/:projectId/branches/:branchId
+   */
+  async deleteBranch(projectId, branchId) {
+    const res = await api.delete(`/api/projects/${projectId}/branches/${branchId}`);
+    return res.data;
+  },
+
+  /**
+   * Upload file (multipart/form-data)
+   * POST /api/projects/:projectId/repository/upload
+   */
+  async uploadFile(projectId, formData) {
+    const res = await api.post(`/api/projects/${projectId}/repository/upload`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return res.data?.data?.file || res.data?.data;
+  },
+
+  /**
+   * Create a new commit
+   * POST /api/projects/:projectId/commits
+   */
+  async createCommit(projectId, message, branchName) {
+    const res = await api.post(`/api/projects/${projectId}/commits`, {
+      message,
+      branchName,
+    });
+    return res.data?.data?.commit || res.data?.data;
+  },
 };
+

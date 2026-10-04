@@ -150,10 +150,11 @@ export default function ProjectSwitcher({
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxHeight: '200px', overflowY: 'auto' }}>
               {projects.map((proj) => {
-                const isSelected = activeProj && activeProj.id === proj.id;
+                const pId = proj._id || proj.id || proj.slug;
+                const isSelected = activeProj && (activeProj._id === pId || activeProj.id === pId || activeProj.slug === pId);
                 return (
                   <button
-                    key={proj.id}
+                    key={pId}
                     onClick={() => {
                       onSelectProject(proj);
                       setIsOpen(false);

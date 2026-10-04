@@ -5,34 +5,39 @@ import {
   LayoutDashboard,
   FolderGit2,
   MessageSquare,
-  Bell,
   Activity,
+  Inbox as InboxIcon,
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
   Folder,
-  Code2
+  Bell,
+  LogOut,
 } from 'lucide-react';
 import ProjectSwitcher from './ProjectSwitcher';
 import SidebarItem from './SidebarItem';
-import { mockProjects } from '../../mock/projects';
+import { useProjects } from '../../context/ProjectContext';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 
 export default function Sidebar({
   isCollapsed,
   onToggleCollapse,
-  currentProject,
-  onSelectProject,
-  onCreateProject
+  onCreateProject,
 }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { projects, currentProject, selectProject } = useProjects();
+  const { logout } = useAuth();
+  const { addToast } = useToast();
 
   const primaryNavItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard, path: '/app/dashboard' },
     { id: 'projects', label: 'Projects', icon: FolderGit2, path: '/app/projects' },
+    { id: 'inbox', label: 'Inbox', icon: InboxIcon, path: '/app/inbox' },
     { id: 'activity', label: 'Activity', icon: Activity, path: '/app/activity' },
     { id: 'messages', label: 'Messages', icon: MessageSquare, path: '/app/messages' },
-    { id: 'notifications', label: 'Notifications', icon: Bell, path: '/app/notifications' }
+    { id: 'notifications', label: 'Notifications', icon: Bell, path: '/app/notifications' },
   ];
 
   const currentPath = location.pathname;
@@ -52,7 +57,7 @@ export default function Sidebar({
         top: 0,
         zIndex: 50,
         flexShrink: 0,
-        overflowX: 'hidden'
+        overflowX: 'hidden',
       }}
     >
       {/* Workspace / Project Switcher Header */}
@@ -63,13 +68,17 @@ export default function Sidebar({
           alignItems: 'center',
           padding: isCollapsed ? '0 0.75rem' : '0 1rem',
           borderBottom: '1px solid var(--border-subtle)',
-          flexShrink: 0
+          flexShrink: 0,
         }}
       >
         <ProjectSwitcher
-          projects={mockProjects}
+          projects={projects}
           currentProject={currentProject}
-          onSelectProject={onSelectProject}
+          onSelectProject={(proj) => {
+            selectProject(proj);
+            const pId = proj._id || proj.id || proj.slug;
+            navigate(`/app/projects/${pId}/repository`);
+          }}
           onCreateProject={onCreateProject}
           isCollapsed={isCollapsed}
         />
@@ -84,7 +93,7 @@ export default function Sidebar({
           flexDirection: 'column',
           gap: '0.25rem',
           overflowY: 'auto',
-          overflowX: 'hidden'
+          overflowX: 'hidden',
         }}
       >
         {/* Primary Nav Items */}
@@ -104,38 +113,43 @@ export default function Sidebar({
         })}
 
         {/* Divider & Your Projects Section */}
-        <div style={{ margin: '0.75rem 0 0.5rem', borderTop: '1px solid var(--border-subtle)' }} />
+        {projects.length > 0 && (
+          <>
+            <div style={{ margin: '0.75rem 0 0.5rem', borderTop: '1px solid var(--border-subtle)' }} />
 
-        {!isCollapsed && (
-          <div
-            style={{
-              fontSize: '0.725rem',
-              fontWeight: 600,
-              color: 'var(--text-muted)',
-              padding: '0.25rem 0.5rem'
-            }}
-          >
-            Your projects
-          </div>
+            {!isCollapsed && (
+              <div
+                style={{
+                  fontSize: '0.725rem',
+                  fontWeight: 600,
+                  color: 'var(--text-muted)',
+                  padding: '0.25rem 0.5rem',
+                }}
+              >
+                Your projects
+              </div>
+            )}
+
+            {projects.map((proj) => {
+              const pId = proj._id || proj.id || proj.slug;
+              const isSelected = currentProject && (currentProject._id === pId || currentProject.id === pId || currentProject.slug === pId);
+              return (
+                <SidebarItem
+                  key={pId}
+                  id={pId}
+                  label={proj.name}
+                  icon={Folder}
+                  isActive={isSelected}
+                  isCollapsed={isCollapsed}
+                  onClick={() => {
+                    selectProject(proj);
+                    navigate(`/app/projects/${pId}/repository`);
+                  }}
+                />
+              );
+            })}
+          </>
         )}
-
-        {mockProjects.map((proj) => {
-          const isSelected = currentProject && currentProject.id === proj.id;
-          return (
-            <SidebarItem
-              key={proj.id}
-              id={proj.id}
-              label={proj.name}
-              icon={Folder}
-              isActive={isSelected}
-              isCollapsed={isCollapsed}
-              onClick={() => {
-                onSelectProject(proj);
-                navigate('/app/projects');
-              }}
-            />
-          );
-        })}
 
         {/* Divider & Settings */}
         <div style={{ margin: '0.75rem 0 0.5rem', borderTop: '1px solid var(--border-subtle)' }} />
@@ -146,7 +160,7 @@ export default function Sidebar({
               fontSize: '0.725rem',
               fontWeight: 600,
               color: 'var(--text-muted)',
-              padding: '0.25rem 0.5rem'
+              padding: '0.25rem 0.5rem',
             }}
           >
             Settings
@@ -161,6 +175,19 @@ export default function Sidebar({
           isCollapsed={isCollapsed}
           onClick={() => navigate('/app/settings')}
         />
+
+        <SidebarItem
+          id="logout"
+          label="Log out"
+          icon={LogOut}
+          isActive={false}
+          isCollapsed={isCollapsed}
+          onClick={() => {
+            logout();
+            addToast({ title: 'Logged out', message: 'You have been signed out successfully.', type: 'info' });
+            navigate('/login');
+          }}
+        />
       </div>
 
       {/* Sidebar Collapse Toggle Footer */}
@@ -171,7 +198,7 @@ export default function Sidebar({
           display: 'flex',
           alignItems: 'center',
           justifyContent: isCollapsed ? 'center' : 'flex-end',
-          flexShrink: 0
+          flexShrink: 0,
         }}
       >
         <button
@@ -187,7 +214,7 @@ export default function Sidebar({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            transition: 'all 0.15s ease'
+            transition: 'all 0.15s ease',
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.color = 'var(--text-primary)';

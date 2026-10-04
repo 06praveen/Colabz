@@ -2,8 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Plus, Smile, AtSign, X, CheckSquare, CircleDot, FileCode, Paperclip } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { useMembers } from '../../context/MemberContext';
-import { mockTasks } from '../../mock/tasks';
-import { mockIssues } from '../../mock/issues';
 import Avatar from '../ui/Avatar';
 
 export default function MessageComposer() {
@@ -56,44 +54,38 @@ export default function MessageComposer() {
   };
 
   const handleInsertMention = (member) => {
-    setContent((prev) => `${prev}@${member.username} `);
+    setContent((prev) => `${prev}@${member.username || member.name.toLowerCase().replace(/\s+/g, '')} `);
     setShowMentionPopover(false);
     if (textareaRef.current) textareaRef.current.focus();
   };
 
   const handleAttachTask = () => {
-    const task = mockTasks[0];
-    if (task) {
-      setSelectedAttachments((prev) => [
-        ...prev,
-        {
-          type: 'task',
-          taskId: task.id,
-          identifier: task.identifier,
-          title: task.title,
-          status: task.status,
-          priority: task.priority
-        }
-      ]);
-    }
+    setSelectedAttachments((prev) => [
+      ...prev,
+      {
+        type: 'task',
+        taskId: 'COL-1',
+        identifier: 'COL-1',
+        title: 'Project Roadmap Task',
+        status: 'IN_PROGRESS',
+        priority: 'High'
+      }
+    ]);
     setShowAttachMenu(false);
   };
 
   const handleAttachIssue = () => {
-    const issue = mockIssues[0];
-    if (issue) {
-      setSelectedAttachments((prev) => [
-        ...prev,
-        {
-          type: 'issue',
-          issueId: issue.id,
-          number: issue.number,
-          title: issue.title,
-          status: issue.status,
-          priority: issue.priority
-        }
-      ]);
-    }
+    setSelectedAttachments((prev) => [
+      ...prev,
+      {
+        type: 'issue',
+        issueId: '1',
+        number: 1,
+        title: 'Workspace Discussion Issue',
+        status: 'Open',
+        priority: 'Medium'
+      }
+    ]);
     setShowAttachMenu(false);
   };
 

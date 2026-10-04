@@ -29,7 +29,8 @@ export default function CallRoom() {
     isParticipantsOpen,
     isDetailsOpen,
     enterLobby,
-    leaveActiveCall
+    leaveActiveCall,
+    cancelCall,
   } = useCalls();
 
   const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false);
@@ -161,7 +162,84 @@ export default function CallRoom() {
     return <CallLobby call={targetCall} />;
   }
 
-  // 3. CONNECTING STATE
+  // 3. OUTGOING RINGING STATE
+  if (callState === 'outgoing') {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '60vh',
+          gap: '1.25rem',
+        }}
+      >
+        <div style={{ position: 'relative' }}>
+          <div
+            style={{
+              position: 'absolute',
+              inset: '-8px',
+              borderRadius: '50%',
+              border: '2px solid var(--accent-primary)',
+              animation: 'clb-pulse-speak 1.5s infinite ease-in-out',
+            }}
+          />
+          <div
+            style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--bg-elevated)',
+              border: '1px solid var(--border-default)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '1.5rem',
+              fontWeight: 700,
+              color: 'var(--accent-primary)',
+            }}
+          >
+            {(targetCall.receiver?.name || 'User').substring(0, 2).toUpperCase()}
+          </div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+            Calling {targetCall.receiver?.name || targetCall.title}...
+          </div>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+            Ringing peer. Waiting for response...
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            cancelCall();
+            navigate(`/app/projects/${activeProjectId}/calls`);
+          }}
+          className="clb-btn"
+          style={{
+            backgroundColor: 'var(--danger, #ff5c70)',
+            color: '#ffffff',
+            border: 'none',
+            padding: '0.5rem 1.25rem',
+            borderRadius: 'var(--radius-pill)',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            marginTop: '0.5rem',
+            cursor: 'pointer',
+          }}
+        >
+          <PhoneOff size={16} />
+          <span>Cancel Call</span>
+        </button>
+      </div>
+    );
+  }
+
+  // 4. CONNECTING STATE
   if (callState === 'connecting') {
     return (
       <div
@@ -171,7 +249,7 @@ export default function CallRoom() {
           alignItems: 'center',
           justifyContent: 'center',
           height: '60vh',
-          gap: '1rem'
+          gap: '1rem',
         }}
       >
         <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>

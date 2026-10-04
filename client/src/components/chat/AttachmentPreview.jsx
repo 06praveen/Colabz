@@ -1,8 +1,6 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { CheckSquare, CircleDot, GitCommit, FileCode, ExternalLink } from 'lucide-react';
-import { mockTasks } from '../../mock/tasks';
-import { mockIssues } from '../../mock/issues';
 
 export default function AttachmentPreview({ attachment }) {
   const navigate = useNavigate();
@@ -13,10 +11,10 @@ export default function AttachmentPreview({ attachment }) {
 
   // Task Attachment
   if (attachment.type === 'task') {
-    const taskObj = mockTasks.find((t) => t.id === attachment.taskId || t.identifier === attachment.identifier) || attachment;
+    const taskObj = attachment;
     return (
       <div
-        onClick={() => navigate(`/app/projects/${activeProjectId}/tasks/${taskObj.id || taskObj.identifier}`)}
+        onClick={() => navigate(`/app/projects/${activeProjectId}/tasks/${taskObj.taskId || taskObj.id || taskObj.identifier}`)}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -55,10 +53,10 @@ export default function AttachmentPreview({ attachment }) {
 
   // Issue Attachment
   if (attachment.type === 'issue') {
-    const issueObj = mockIssues.find((i) => i.id === attachment.issueId || i.number === attachment.number) || attachment;
+    const issueObj = attachment;
     return (
       <div
-        onClick={() => navigate(`/app/projects/${activeProjectId}/issues/${issueObj.id || issueObj.number}`)}
+        onClick={() => navigate(`/app/projects/${activeProjectId}/issues/${issueObj.issueId || issueObj.id || issueObj.number}`)}
         style={{
           display: 'flex',
           alignItems: 'center',

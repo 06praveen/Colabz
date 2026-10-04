@@ -1,62 +1,33 @@
 const express = require("express");
-const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+const {
+  registerUser,
+  loginUser,
+  getMe,
+  logoutUser,
+  initiateGitHubAuth,
+  handleGitHubCallback,
+} = require("../controllers/authController");
 const protect = require("../middleware/authMiddleware");
+const validate = require("../middleware/validateMiddleware");
+const rateLimit = require("../middleware/rateLimitMiddleware");
+const { registerValidator, loginValidator } = require("../validators/authValidator");
 
 const router = express.Router();
 
-const generateToken = (user) =>
-  jwt.sign({ id: user._id, email: user.email, name: user.name }, process.env.JWT_SECRET || "supersecretcodetogetherjwtkey", {
-    expiresIn: "7d",
-  });
-
-router.post("/register", async (req, res) => {
-  const { name, email, password } = req.body;
-
-  if (!name || !email || !password) {
-    return res.status(400).json({ message: "Please fill in all fields" });
-  }
-
-  const userExists = await User.findOne({ email });
-  if (userExists) {
-    return res.status(400).json({ message: "User already exists" });
-  }
-
-  const user = await User.create({ name, email, password });
-
-  res.status(201).json({
-    _id: user._id,
-    name: user.name,
-    email: user.email,
-    avatarColor: user.avatarColor,
-    token: generateToken(user),
-  });
+// Rate limiter: 20 auth attempts per 5 minutes to prevent brute-force attacks
+const authLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 20,
+  message: "Too many authentication attempts. Please try again in a few minutes.",
 });
 
-router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
+router.post("/register", authLimiter, validate(registerValidator), registerUser);
+router.post("/login", authLimiter, validate(loginValidator), loginUser);
+router.get("/me", protect, getMe);
+router.post("/logout", logoutUser);
 
-  const user = await User.findOne({ email });
-  if (!user || !(await user.matchPassword(password))) {
-    return res.status(401).json({ message: "Incorrect email or password" });
-  }
-
-  user.isOnline = true;
-  await user.save();
-
-  res.json({
-    _id: user._id,
-    name: user.name,
-    email: user.email,
-    avatarColor: user.avatarColor,
-    token: generateToken(user),
-  });
-});
-
-router.get("/me", protect, async (req, res) => {
-  const user = await User.findById(req.user.id).select("-password");
-  if (!user) return res.status(404).json({ message: "User not found" });
-  res.json(user);
-});
+// GitHub OAuth routes
+router.get("/github", initiateGitHubAuth);
+router.get("/github/callback", handleGitHubCallback);
 
 module.exports = router;

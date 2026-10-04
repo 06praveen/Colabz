@@ -11,10 +11,10 @@ export default function RepositoryHeader({
   onSearchChange,
   onClearSearch,
   onOpenCreateFile,
-  onOpenCreateFolder
+  onOpenCreateFolder,
+  onOpenUpload,
 }) {
   const [isNewMenuOpen, setIsNewMenuOpen] = useState(false);
-  const { addToast } = useToast();
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -29,11 +29,9 @@ export default function RepositoryHeader({
 
   const handleUploadClick = () => {
     setIsNewMenuOpen(false);
-    addToast({
-      title: 'File upload',
-      message: 'Drag & drop file upload modal ready for backend integration.',
-      type: 'info'
-    });
+    if (onOpenUpload) {
+      onOpenUpload();
+    }
   };
 
   return (

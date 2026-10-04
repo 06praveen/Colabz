@@ -1,10 +1,11 @@
 import React from 'react';
 import { Sliders, BellOff, BellRing, Volume2, VolumeX } from 'lucide-react';
 import { useNotificationContext } from '../../context/NotificationContext';
-import { mockProjects } from '../../mock/projects';
+import { useProjects } from '../../context/ProjectContext';
 
 export default function NotificationPreferences() {
   const { preferences, togglePreference, mutedProjects, toggleMuteProject } = useNotificationContext();
+  const { projects } = useProjects();
 
   const prefKeys = [
     { key: 'assignment', label: 'Task Assignments', desc: 'Notify when assigned to a task or issue' },
@@ -119,55 +120,62 @@ export default function NotificationPreferences() {
             Project Mute Controls
           </h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {mockProjects.map((proj) => {
-              const isMuted = mutedProjects[proj.id];
-              return (
-                <div
-                  key={proj.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '0.6rem 0.85rem',
-                    backgroundColor: 'var(--bg-input)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-sm)'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    {isMuted ? (
-                      <VolumeX size={16} color="var(--warning)" />
-                    ) : (
-                      <Volume2 size={16} color="var(--success)" />
-                    )}
-                    <div>
-                      <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text-primary)' }}>
-                        {proj.name}
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        {isMuted ? 'Muted (No sound/bell alerts)' : 'Active (All notifications allowed)'}
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => toggleMuteProject(proj.id)}
+            {projects.length === 0 ? (
+              <div style={{ fontSize: '0.775rem', color: 'var(--text-muted)', padding: '0.5rem 0' }}>
+                No active projects found to configure muting.
+              </div>
+            ) : (
+              projects.map((proj) => {
+                const pId = proj._id || proj.id || proj.slug;
+                const isMuted = mutedProjects[pId];
+                return (
+                  <div
+                    key={pId}
                     style={{
-                      padding: '0.25rem 0.6rem',
-                      borderRadius: 'var(--radius-sm)',
-                      border: '1px solid var(--border-default)',
-                      backgroundColor: isMuted ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.05)',
-                      color: isMuted ? 'var(--warning)' : 'var(--text-secondary)',
-                      fontSize: '0.75rem',
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease'
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.6rem 0.85rem',
+                      backgroundColor: 'var(--bg-input)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-sm)'
                     }}
                   >
-                    {isMuted ? 'Unmute' : 'Mute'}
-                  </button>
-                </div>
-              );
-            })}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      {isMuted ? (
+                        <VolumeX size={16} color="var(--warning)" />
+                      ) : (
+                        <Volume2 size={16} color="var(--success)" />
+                      )}
+                      <div>
+                        <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+                          {proj.name}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          {isMuted ? 'Muted (No sound/bell alerts)' : 'Active (All notifications allowed)'}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => toggleMuteProject(pId)}
+                      style={{
+                        padding: '0.25rem 0.6rem',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1px solid var(--border-default)',
+                        backgroundColor: isMuted ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.05)',
+                        color: isMuted ? 'var(--warning)' : 'var(--text-secondary)',
+                        fontSize: '0.75rem',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {isMuted ? 'Unmute' : 'Mute'}
+                    </button>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>

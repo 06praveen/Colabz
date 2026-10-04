@@ -1,11 +1,22 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { mockMemberService } from '../services/mockMemberService';
+import { memberService } from '../services/memberService';
+import { useAuth } from './AuthContext';
+import { useProject } from './ProjectContext';
 
 const MemberContext = createContext(null);
 
-export function MemberProvider({ projectId = 'proj_1', children }) {
+export function MemberProvider({ projectId: propProjectId, children }) {
+  const { user } = useAuth();
+  const { currentProject } = useProject();
+
+  const effectiveProjectId =
+    propProjectId && propProjectId !== 'proj_1'
+      ? propProjectId
+      : currentProject?._id || currentProject?.id || propProjectId || 'proj_1';
+
   const [members, setMembers] = useState([]);
   const [pendingInvitations, setPendingInvitations] = useState([]);
+  const [myMembership, setMyMembership] = useState(null);
   const [teamActivity, setTeamActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -14,59 +25,94 @@ export function MemberProvider({ projectId = 'proj_1', children }) {
   const [roleFilter, setRoleFilter] = useState('All');
   const [sortOption, setSortOption] = useState('Recently joined'); // 'Recently joined', 'Name', 'Role'
 
-  const currentUserId = 'usr_1'; // Praveen Tiwari
+  const currentUserId = user?._id || user?.id || 'usr_1';
 
   const loadMemberData = useCallback(async () => {
+    if (!effectiveProjectId) {
+      setMembers([]);
+      setPendingInvitations([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const [membersData, invitesData, activityData] = await Promise.all([
-        mockMemberService.getMembers(projectId),
-        mockMemberService.getPendingInvitations(projectId),
-        mockMemberService.getTeamActivity(projectId)
+      const [membersData, invitesData, membershipData] = await Promise.all([
+        memberService.getMembers(effectiveProjectId).catch(() => []),
+        memberService.getPendingInvitations(effectiveProjectId).catch(() => []),
+        memberService.getMyMembership(effectiveProjectId).catch(() => null),
       ]);
-      setMembers([...membersData]);
-      setPendingInvitations([...invitesData]);
-      setTeamActivity([...activityData]);
+      setMembers([...(membersData || [])]);
+      setPendingInvitations([...(invitesData || [])]);
+      setMyMembership(membershipData);
+      setTeamActivity([]);
     } catch (err) {
       console.error('Failed to load member data:', err);
       setError('Failed to load team members.');
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [effectiveProjectId]);
 
   useEffect(() => {
     loadMemberData();
   }, [loadMemberData]);
 
-  const inviteMember = async ({ emailOrUsername, role }) => {
-    const invite = await mockMemberService.inviteMember(projectId, { emailOrUsername, role });
+  const addMember = async (payload) => {
+    const member = await memberService.addMember(effectiveProjectId, payload);
+    await loadMemberData();
+    return member;
+  };
+
+  const inviteMember = async ({ emailOrUsername, username, email, role }) => {
+    const invite = await memberService.inviteMember(effectiveProjectId, {
+      emailOrUsername: emailOrUsername || username || email,
+      username,
+      email,
+      role,
+    });
     await loadMemberData();
     return invite;
   };
 
   const updateMemberRole = async (memberId, newRole) => {
-    const updated = await mockMemberService.updateMemberRole(projectId, memberId, newRole);
+    const updated = await memberService.updateMemberRole(effectiveProjectId, memberId, newRole);
     await loadMemberData();
     return updated;
   };
 
   const removeMember = async (memberId) => {
-    await mockMemberService.removeMember(projectId, memberId);
+    await memberService.removeMember(effectiveProjectId, memberId);
     await loadMemberData();
     return true;
   };
 
   const cancelInvitation = async (invitationId) => {
-    await mockMemberService.cancelInvitation(projectId, invitationId);
+    await memberService.cancelInvitation(effectiveProjectId, invitationId);
     await loadMemberData();
     return true;
   };
 
-  const getMember = useCallback((memberId) => {
-    return members.find((m) => m.id === memberId || m.username === memberId);
-  }, [members]);
+  const leaveProject = async () => {
+    await memberService.leaveProject(effectiveProjectId);
+    await loadMemberData();
+    return true;
+  };
+
+  const getMember = useCallback(
+    (memberId) => {
+      return members.find(
+        (m) =>
+          m.id === memberId ||
+          m._id === memberId ||
+          m.userId === memberId ||
+          m.username === memberId ||
+          m.username === `@${memberId}`
+      );
+    },
+    [members]
+  );
 
   const filteredMembers = useMemo(() => {
     let result = [...members];
@@ -76,26 +122,31 @@ export function MemberProvider({ projectId = 'proj_1', children }) {
       const q = searchQuery.toLowerCase().trim();
       result = result.filter(
         (m) =>
-          m.name.toLowerCase().includes(q) ||
-          m.username.toLowerCase().includes(q) ||
-          m.role.toLowerCase().includes(q)
+          (m.name && m.name.toLowerCase().includes(q)) ||
+          (m.username && m.username.toLowerCase().includes(q)) ||
+          (m.email && m.email.toLowerCase().includes(q)) ||
+          (m.role && m.role.toLowerCase().includes(q))
       );
     }
 
     // Filter by role
     if (roleFilter && roleFilter !== 'All') {
-      result = result.filter((m) => m.role.toLowerCase() === roleFilter.toLowerCase());
+      result = result.filter((m) => m.role?.toLowerCase() === roleFilter.toLowerCase());
     }
 
     // Sort
     if (sortOption === 'Name') {
-      result.sort((a, b) => a.name.localeCompare(b.name));
+      result.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     } else if (sortOption === 'Role') {
       const rolePriority = { owner: 1, admin: 2, developer: 3, designer: 4, viewer: 5 };
-      result.sort((a, b) => (rolePriority[a.role] || 99) - (rolePriority[b.role] || 99));
+      result.sort(
+        (a, b) =>
+          (rolePriority[a.role?.toLowerCase()] || 99) -
+          (rolePriority[b.role?.toLowerCase()] || 99)
+      );
     } else {
-      // Recently joined (default order in mock)
-      result.sort((a, b) => (a.id === 'usr_1' ? -1 : 1));
+      // Recently joined or default
+      result.sort((a, b) => (a.role === 'owner' ? -1 : 1));
     }
 
     return result;
@@ -103,11 +154,11 @@ export function MemberProvider({ projectId = 'proj_1', children }) {
 
   const teamSummary = useMemo(() => {
     const total = members.length;
-    const developers = members.filter((m) => m.role === 'developer').length;
-    const designers = members.filter((m) => m.role === 'designer').length;
-    const owners = members.filter((m) => m.role === 'owner').length;
-    const admins = members.filter((m) => m.role === 'admin').length;
-    const viewers = members.filter((m) => m.role === 'viewer').length;
+    const developers = members.filter((m) => m.role?.toLowerCase() === 'developer').length;
+    const designers = members.filter((m) => m.role?.toLowerCase() === 'designer').length;
+    const owners = members.filter((m) => m.role?.toLowerCase() === 'owner').length;
+    const admins = members.filter((m) => m.role?.toLowerCase() === 'admin').length;
+    const viewers = members.filter((m) => m.role?.toLowerCase() === 'viewer').length;
 
     return { total, developers, designers, owners, admins, viewers };
   }, [members]);
@@ -115,10 +166,11 @@ export function MemberProvider({ projectId = 'proj_1', children }) {
   return (
     <MemberContext.Provider
       value={{
-        projectId,
+        projectId: effectiveProjectId,
         members,
         filteredMembers,
         pendingInvitations,
+        myMembership,
         teamActivity,
         teamSummary,
         loading,
@@ -130,12 +182,14 @@ export function MemberProvider({ projectId = 'proj_1', children }) {
         sortOption,
         setSortOption,
         currentUserId,
+        addMember,
         inviteMember,
         updateMemberRole,
         removeMember,
+        leaveProject,
         cancelInvitation,
         getMember,
-        reloadMembers: loadMemberData
+        reloadMembers: loadMemberData,
       }}
     >
       {children}
@@ -150,3 +204,5 @@ export function useMembers() {
   }
   return context;
 }
+
+export default MemberContext;

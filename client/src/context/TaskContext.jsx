@@ -1,9 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { mockTaskService } from '../services/mockTaskService';
+import { taskService } from '../services/taskService';
+import { useProjects } from './ProjectContext';
 
 const TaskContext = createContext(null);
 
-export function TaskProvider({ projectId = 'proj_1', children }) {
+export function TaskProvider({ projectId: propProjectId, children }) {
+  const { currentProject } = useProjects();
+  const effectiveProjectId =
+    propProjectId && propProjectId !== 'proj_1'
+      ? propProjectId
+      : currentProject?._id || currentProject?.id || propProjectId || 'proj_1';
+
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -14,41 +21,47 @@ export function TaskProvider({ projectId = 'proj_1', children }) {
     status: '',
     priority: '',
     assignee: '',
-    label: ''
+    label: '',
   });
 
   const loadTasks = useCallback(async () => {
+    if (!effectiveProjectId) {
+      setTasks([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const data = await mockTaskService.getTasks(projectId);
-      setTasks([...data]);
+      const data = await taskService.getTasks(effectiveProjectId);
+      setTasks([...(data || [])]);
     } catch (err) {
       console.error('Failed to load tasks:', err);
       setError('Failed to load tasks for this project.');
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [effectiveProjectId]);
 
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
 
   const createTask = async (taskData) => {
-    const newTask = await mockTaskService.createTask(projectId, taskData);
+    const newTask = await taskService.createTask(effectiveProjectId, taskData);
     await loadTasks();
     return newTask;
   };
 
   const updateTask = async (taskId, updates) => {
-    const updated = await mockTaskService.updateTask(projectId, taskId, updates);
+    const updated = await taskService.updateTask(effectiveProjectId, taskId, updates);
     await loadTasks();
     return updated;
   };
 
   const deleteTask = async (taskId) => {
-    await mockTaskService.deleteTask(projectId, taskId);
+    await taskService.deleteTask(effectiveProjectId, taskId);
     await loadTasks();
     return true;
   };
@@ -61,7 +74,7 @@ export function TaskProvider({ projectId = 'proj_1', children }) {
   return (
     <TaskContext.Provider
       value={{
-        projectId,
+        projectId: effectiveProjectId,
         tasks,
         loading,
         error,
@@ -77,7 +90,7 @@ export function TaskProvider({ projectId = 'proj_1', children }) {
         createTask,
         updateTask,
         deleteTask,
-        reloadTasks: loadTasks
+        reloadTasks: loadTasks,
       }}
     >
       {children}
@@ -92,3 +105,5 @@ export function useTasks() {
   }
   return context;
 }
+
+export default TaskContext;

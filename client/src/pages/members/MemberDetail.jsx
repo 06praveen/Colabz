@@ -8,13 +8,14 @@ import MemberActivity from '../../components/members/MemberActivity';
 import Skeleton from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
 import { ArrowLeft, GitCommit, CheckSquare, CircleDot, Calendar, FolderGit2, Shield, User } from 'lucide-react';
-import { ROLE_DESCRIPTIONS } from '../../mock/members';
-import { mockRepositories } from '../../mock/repositories';
+import { ROLE_DESCRIPTIONS } from '../../constants/roles';
+import { useProjects } from '../../context/ProjectContext';
 
 export default function MemberDetail() {
   const { memberId, projectId } = useParams();
   const navigate = useNavigate();
   const { getMember, loading, currentUserId } = useMembers();
+  const { projects } = useProjects();
 
   const activeProjectId = projectId || 'proj_1';
   const member = getMember(memberId);
@@ -52,9 +53,7 @@ export default function MemberDetail() {
   }
 
   const isCurrentUser = member.id === currentUserId;
-  const userProjects = mockRepositories.filter((r) =>
-    (member.projectIds || ['proj_1']).includes(r.projectId)
-  );
+  const userProjects = projects.length > 0 ? projects : [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: '900px' }}>
@@ -234,33 +233,36 @@ export default function MemberDetail() {
             Projects ({userProjects.length})
           </h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
-            {userProjects.map((p) => (
-              <div
-                key={p.projectId}
-                onClick={() => navigate(`/app/projects/${p.projectId}/repository`)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.75rem 0.85rem',
-                  backgroundColor: 'var(--bg-elevated)',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: 'var(--radius-sm)',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <FolderGit2 size={18} color="var(--accent-primary)" />
-                <div>
-                  <div style={{ fontSize: '0.875rem', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-                    {p.projectName}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    {p.description}
+            {userProjects.map((p) => {
+              const pId = p._id || p.id || p.slug;
+              return (
+                <div
+                  key={pId}
+                  onClick={() => navigate(`/app/projects/${pId}/repository`)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.75rem 0.85rem',
+                    backgroundColor: 'var(--bg-elevated)',
+                    border: '1px solid var(--border-default)',
+                    borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <FolderGit2 size={18} color="var(--accent-primary)" />
+                  <div>
+                    <div style={{ fontSize: '0.875rem', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                      {p.name}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      {p.description || 'Workspace repository'}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

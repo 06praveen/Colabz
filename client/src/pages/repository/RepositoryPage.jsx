@@ -9,7 +9,8 @@ import CodeViewer from '../../components/repository/CodeViewer';
 import ReadmeViewer from '../../components/repository/ReadmeViewer';
 import CreateFileModal from '../../components/repository/CreateFileModal';
 import CreateFolderModal from '../../components/repository/CreateFolderModal';
-import { ArrowLeft, AlertCircle, FilePlus, RefreshCw, FolderGit2 } from 'lucide-react';
+import FileUploadModal from '../../components/repository/FileUploadModal';
+import { ArrowLeft, AlertCircle, FilePlus, RefreshCw, FolderGit2, Upload } from 'lucide-react';
 import { repositoryService } from '../../services/repositoryService';
 
 export default function RepositoryPage() {
@@ -21,6 +22,7 @@ export default function RepositoryPage() {
   const [nodeLoading, setNodeLoading] = useState(false);
   const [isCreateFileOpen, setIsCreateFileOpen] = useState(false);
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
 
   const currentPath = splat || '';
   const activeProjectId = projectId || 'proj_1';
@@ -136,14 +138,22 @@ export default function RepositoryPage() {
               Start your repository by creating your first file.
             </p>
           </div>
-          <button
-            onClick={() => setIsCreateFileOpen(true)}
-            className="clb-btn clb-btn-primary"
-            style={{ marginTop: '0.5rem' }}
-          >
-            <FilePlus size={15} />
-            Create file
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button
+              onClick={() => setIsCreateFileOpen(true)}
+              className="clb-btn clb-btn-primary"
+            >
+              <FilePlus size={15} />
+              Create file
+            </button>
+            <button
+              onClick={() => setIsUploadOpen(true)}
+              className="clb-btn clb-btn-secondary"
+            >
+              <Upload size={15} />
+              Upload file
+            </button>
+          </div>
 
           <CreateFileModal
             isOpen={isCreateFileOpen}
@@ -151,6 +161,17 @@ export default function RepositoryPage() {
             parentPath=""
             onFileCreated={(newFile) => {
               navigate(`/app/projects/${activeProjectId}/repository/tree/${newFile.path}`);
+            }}
+          />
+
+          <FileUploadModal
+            isOpen={isUploadOpen}
+            onClose={() => setIsUploadOpen(false)}
+            parentPath=""
+            onFileUploaded={(uploadedFile) => {
+              if (uploadedFile && uploadedFile.path) {
+                navigate(`/app/projects/${activeProjectId}/repository/tree/${uploadedFile.path}`);
+              }
             }}
           />
         </div>
@@ -207,6 +228,7 @@ export default function RepositoryPage() {
         onClearSearch={() => setSearchQuery('')}
         onOpenCreateFile={() => setIsCreateFileOpen(true)}
         onOpenCreateFolder={() => setIsCreateFolderOpen(true)}
+        onOpenUpload={() => setIsUploadOpen(true)}
       />
 
       {/* Mobile Back Button when inspecting file */}
@@ -272,6 +294,18 @@ export default function RepositoryPage() {
         isOpen={isCreateFolderOpen}
         onClose={() => setIsCreateFolderOpen(false)}
         parentPath={currentNode && currentNode.isFolder ? currentNode.path : ''}
+      />
+
+      {/* File Upload Modal */}
+      <FileUploadModal
+        isOpen={isUploadOpen}
+        onClose={() => setIsUploadOpen(false)}
+        parentPath={currentNode && currentNode.isFolder ? currentNode.path : ''}
+        onFileUploaded={(uploadedFile) => {
+          if (uploadedFile && uploadedFile.path) {
+            navigate(`/app/projects/${activeProjectId}/repository/tree/${uploadedFile.path}`);
+          }
+        }}
       />
     </div>
   );

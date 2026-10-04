@@ -1,54 +1,74 @@
 import React, { useState } from 'react';
 import Modal from '../ui/Modal';
 import { useToast } from '../../context/ToastContext';
+import { useProjects } from '../../context/ProjectContext';
 import { FolderGit2, Lock, Globe } from 'lucide-react';
 
 export default function CreateProjectModal({ isOpen, onClose, onProjectCreated }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [visibility, setVisibility] = useState('PUBLIC');
+  const [visibility, setVisibility] = useState('private');
   const [techStack, setTechStack] = useState('React, Node.js, MongoDB');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
   const { addToast } = useToast();
+  const { createProject } = useProjects();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    const newProject = {
-      id: `proj_${Date.now()}`,
-      name: name.toLowerCase().replace(/\s+/g, '-'),
-      displayName: name,
-      slug: name.toLowerCase().replace(/\s+/g, '-'),
-      description: description || 'Workspace repository.',
-      techStack: techStack.split(',').map((t) => t.trim()),
-      visibility,
-      branch: 'main',
-      lastCommit: '1a2b3c4',
-      commitMessage: 'initial commit',
-      updatedAt: 'Just now',
-      membersCount: 1,
-      openIssues: 0,
-      pendingTasks: 0,
-      starred: false,
-      accent: '#00E5A3',
-      status: 'Active'
-    };
+    setIsSubmitting(true);
+    setFormError('');
 
-    addToast({
-      title: 'Project created',
-      message: `Project "${newProject.name}" has been created.`,
-      type: 'success'
-    });
+    try {
+      const createdProject = await createProject({
+        name: name.trim(),
+        description: description ? description.trim() : '',
+        visibility: visibility.toLowerCase(),
+        technologies: techStack.split(',').map((t) => t.trim()).filter(Boolean),
+      });
 
-    if (onProjectCreated) onProjectCreated(newProject);
-    setName('');
-    setDescription('');
-    onClose();
+      addToast({
+        title: 'Project created',
+        message: `Project "${createdProject.name}" has been created successfully.`,
+        type: 'success',
+      });
+
+      if (onProjectCreated) onProjectCreated(createdProject);
+      setName('');
+      setDescription('');
+      onClose();
+    } catch (err) {
+      setFormError(err.message || 'Failed to create project.');
+      addToast({
+        title: 'Creation failed',
+        message: err.message || 'Could not create project. Please try again.',
+        type: 'error',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Create new project">
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+        {formError && (
+          <div
+            style={{
+              padding: '0.65rem',
+              background: 'var(--danger-bg)',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid rgba(255, 92, 112, 0.3)',
+              color: 'var(--danger)',
+              fontSize: '0.8rem',
+            }}
+          >
+            {formError}
+          </div>
+        )}
+
         <div className="clb-input-group">
           <label className="clb-label">Project name *</label>
           <input
@@ -90,18 +110,18 @@ export default function CreateProjectModal({ isOpen, onClose, onProjectCreated }
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             <button
               type="button"
-              onClick={() => setVisibility('PUBLIC')}
+              onClick={() => setVisibility('public')}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.6rem',
                 padding: '0.75rem',
                 borderRadius: 'var(--radius-sm)',
-                border: visibility === 'PUBLIC' ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
-                backgroundColor: visibility === 'PUBLIC' ? 'rgba(0, 229, 163, 0.08)' : 'var(--bg-input)',
-                color: visibility === 'PUBLIC' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                border: visibility.toLowerCase() === 'public' ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
+                backgroundColor: visibility.toLowerCase() === 'public' ? 'rgba(0, 229, 163, 0.08)' : 'var(--bg-input)',
+                color: visibility.toLowerCase() === 'public' ? 'var(--accent-primary)' : 'var(--text-secondary)',
                 cursor: 'pointer',
-                transition: 'all 0.15s ease'
+                transition: 'all 0.15s ease',
               }}
             >
               <Globe size={18} />
@@ -113,18 +133,18 @@ export default function CreateProjectModal({ isOpen, onClose, onProjectCreated }
 
             <button
               type="button"
-              onClick={() => setVisibility('PRIVATE')}
+              onClick={() => setVisibility('private')}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.6rem',
                 padding: '0.75rem',
                 borderRadius: 'var(--radius-sm)',
-                border: visibility === 'PRIVATE' ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
-                backgroundColor: visibility === 'PRIVATE' ? 'rgba(0, 229, 163, 0.08)' : 'var(--bg-input)',
-                color: visibility === 'PRIVATE' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                border: visibility.toLowerCase() === 'private' ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
+                backgroundColor: visibility.toLowerCase() === 'private' ? 'rgba(0, 229, 163, 0.08)' : 'var(--bg-input)',
+                color: visibility.toLowerCase() === 'private' ? 'var(--accent-primary)' : 'var(--text-secondary)',
                 cursor: 'pointer',
-                transition: 'all 0.15s ease'
+                transition: 'all 0.15s ease',
               }}
             >
               <Lock size={18} />
@@ -137,12 +157,12 @@ export default function CreateProjectModal({ isOpen, onClose, onProjectCreated }
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
-          <button type="button" onClick={onClose} className="clb-btn clb-btn-ghost">
+          <button type="button" onClick={onClose} disabled={isSubmitting} className="clb-btn clb-btn-ghost">
             Cancel
           </button>
-          <button type="submit" className="clb-btn clb-btn-primary">
+          <button type="submit" disabled={isSubmitting} className="clb-btn clb-btn-primary">
             <FolderGit2 size={15} />
-            Create project
+            {isSubmitting ? 'Creating...' : 'Create project'}
           </button>
         </div>
       </form>

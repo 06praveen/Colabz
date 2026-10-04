@@ -3,7 +3,7 @@ import { repositoryService } from '../services/repositoryService';
 
 const RepositoryContext = createContext(null);
 
-export function RepositoryProvider({ projectId = 'proj_1', children }) {
+export function RepositoryProvider({ projectId, children }) {
   const [repo, setRepo] = useState(null);
   const [files, setFiles] = useState([]);
   const [branches, setBranches] = useState([]);
@@ -12,6 +12,11 @@ export function RepositoryProvider({ projectId = 'proj_1', children }) {
   const [loading, setLoading] = useState(true);
 
   const loadRepositoryData = useCallback(async () => {
+    if (!projectId) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const [repoData, filesData, branchesData, commitsData] = await Promise.all([
@@ -22,12 +27,16 @@ export function RepositoryProvider({ projectId = 'proj_1', children }) {
       ]);
 
       setRepo(repoData);
-      setFiles([...filesData]);
-      setBranches(branchesData);
-      setCommits(commitsData);
+      setFiles(Array.isArray(filesData) ? [...filesData] : []);
+      setBranches(Array.isArray(branchesData) ? branchesData : []);
+      setCommits(Array.isArray(commitsData) ? commitsData : []);
       setCurrentBranch(repoData?.defaultBranch || 'main');
     } catch (err) {
       console.error('Failed to load repository:', err);
+      // On error, set empty state to avoid crash
+      setFiles([]);
+      setBranches([]);
+      setCommits([]);
     } finally {
       setLoading(false);
     }
@@ -37,20 +46,50 @@ export function RepositoryProvider({ projectId = 'proj_1', children }) {
     loadRepositoryData();
   }, [loadRepositoryData]);
 
-  const selectBranch = (branchName) => {
+  const selectBranch = useCallback(async (branchName) => {
     setCurrentBranch(branchName);
-  };
+    // Reload files for the selected branch
+    if (projectId) {
+      try {
+        const filesData = await repositoryService.getFiles(projectId, branchName);
+        setFiles(Array.isArray(filesData) ? [...filesData] : []);
+      } catch (err) {
+        console.error('Failed to load branch files:', err);
+      }
+    }
+  }, [projectId]);
 
   const createFile = async (parentPath, fileName, content) => {
-    const newFile = await repositoryService.createFile(projectId, parentPath, fileName, content);
-    await loadRepositoryData();
-    return newFile;
+    try {
+      const newFile = await repositoryService.createFile(projectId, parentPath, fileName, content);
+      await loadRepositoryData();
+      return newFile;
+    } catch (err) {
+      console.error('Failed to create file:', err);
+      throw err;
+    }
   };
 
   const createFolder = async (parentPath, folderName) => {
-    const newFolder = await repositoryService.createFolder(projectId, parentPath, folderName);
-    await loadRepositoryData();
-    return newFolder;
+    try {
+      const newFolder = await repositoryService.createFolder(projectId, parentPath, folderName);
+      await loadRepositoryData();
+      return newFolder;
+    } catch (err) {
+      console.error('Failed to create folder:', err);
+      throw err;
+    }
+  };
+
+  const uploadFile = async (formData) => {
+    try {
+      const uploadedFile = await repositoryService.uploadFile(projectId, formData);
+      await loadRepositoryData();
+      return uploadedFile;
+    } catch (err) {
+      console.error('Failed to upload file:', err);
+      throw err;
+    }
   };
 
   return (
@@ -66,6 +105,7 @@ export function RepositoryProvider({ projectId = 'proj_1', children }) {
         selectBranch,
         createFile,
         createFolder,
+        uploadFile,
         reload: loadRepositoryData
       }}
     >

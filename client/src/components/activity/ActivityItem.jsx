@@ -1,18 +1,30 @@
 import React from 'react';
 import ActivityIcon from './ActivityIcon';
-import { mockMembers } from '../../mock/members';
-import { mockProjects } from '../../mock/projects';
 
 export default function ActivityItem({ activity, isLast = false }) {
-  const actor = mockMembers.find((m) => m.id === activity.actorId) || {
-    name: 'Team Member',
-    initials: 'TM',
-    color: '#6366f1'
-  };
+  const actor = (activity.actor && typeof activity.actor === 'object')
+    ? {
+        name: activity.actor.name || 'Team Member',
+        avatar: activity.actor.avatar,
+        color: activity.actor.avatarColor || '#6366f1',
+        initials: (activity.actor.name || 'TM')
+          .split(' ')
+          .map((n) => n[0])
+          .join('')
+          .substring(0, 2)
+          .toUpperCase(),
+      }
+    : {
+        name: activity.actorName || activity.user || 'Team Member',
+        initials: activity.avatarInitials || 'TM',
+        color: '#6366f1',
+      };
 
-  const project = mockProjects.find((p) => p.id === activity.projectId) || {
-    name: 'Campus Connect'
-  };
+  const project = (activity.project && typeof activity.project === 'object')
+    ? { name: activity.project.name || 'Project' }
+    : {
+        name: activity.projectName || 'Project',
+      };
 
   return (
     <div style={{ display: 'flex', gap: '1rem', position: 'relative' }}>

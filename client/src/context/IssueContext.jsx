@@ -1,9 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { mockIssueService } from '../services/mockIssueService';
+import { issueService } from '../services/issueService';
+import { useProjects } from './ProjectContext';
 
 const IssueContext = createContext(null);
 
-export function IssueProvider({ projectId = 'proj_1', children }) {
+export function IssueProvider({ projectId: propProjectId, children }) {
+  const { currentProject } = useProjects();
+  const effectiveProjectId =
+    propProjectId && propProjectId !== 'proj_1'
+      ? propProjectId
+      : currentProject?._id || currentProject?.id || propProjectId || 'proj_1';
+
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -12,41 +19,47 @@ export function IssueProvider({ projectId = 'proj_1', children }) {
   const [filters, setFilters] = useState({
     priority: '',
     assignee: '',
-    label: ''
+    label: '',
   });
 
   const loadIssues = useCallback(async () => {
+    if (!effectiveProjectId) {
+      setIssues([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const data = await mockIssueService.getIssues(projectId);
-      setIssues([...data]);
+      const data = await issueService.getIssues(effectiveProjectId);
+      setIssues([...(data || [])]);
     } catch (err) {
       console.error('Failed to load issues:', err);
       setError('Failed to load issues for this project.');
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [effectiveProjectId]);
 
   useEffect(() => {
     loadIssues();
   }, [loadIssues]);
 
   const createIssue = async (issueData) => {
-    const newIssue = await mockIssueService.createIssue(projectId, issueData);
+    const newIssue = await issueService.createIssue(effectiveProjectId, issueData);
     await loadIssues();
     return newIssue;
   };
 
   const updateIssue = async (issueId, updates) => {
-    const updated = await mockIssueService.updateIssue(projectId, issueId, updates);
+    const updated = await issueService.updateIssue(effectiveProjectId, issueId, updates);
     await loadIssues();
     return updated;
   };
 
   const deleteIssue = async (issueId) => {
-    await mockIssueService.deleteIssue(projectId, issueId);
+    await issueService.deleteIssue(effectiveProjectId, issueId);
     await loadIssues();
     return true;
   };
@@ -60,7 +73,7 @@ export function IssueProvider({ projectId = 'proj_1', children }) {
   };
 
   const addComment = async (issueId, text) => {
-    const comm = await mockIssueService.addComment(projectId, issueId, text);
+    const comm = await issueService.addComment(effectiveProjectId, issueId, text);
     await loadIssues();
     return comm;
   };
@@ -73,7 +86,7 @@ export function IssueProvider({ projectId = 'proj_1', children }) {
   return (
     <IssueContext.Provider
       value={{
-        projectId,
+        projectId: effectiveProjectId,
         issues,
         loading,
         error,
@@ -90,7 +103,7 @@ export function IssueProvider({ projectId = 'proj_1', children }) {
         closeIssue,
         reopenIssue,
         addComment,
-        reloadIssues: loadIssues
+        reloadIssues: loadIssues,
       }}
     >
       {children}
@@ -105,3 +118,5 @@ export function useIssues() {
   }
   return context;
 }
+
+export default IssueContext;

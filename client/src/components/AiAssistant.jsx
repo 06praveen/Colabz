@@ -98,7 +98,7 @@ export default function AiAssistant({ repo, isOpen, onClose }) {
     {
       id: 'init-1',
       role: 'assistant',
-      text: "👋 Hi! I am your **CodeTogether AI Coding Assistant**.\n\nI can help you understand code, diagnose errors, summarize this repository, or assist with setup problems.\n\nChoose a quick action below or type your question!",
+      text: "👋 Hi! I am your **Colabz AI Coding Assistant**.\n\nI can help you understand code, diagnose errors, summarize this repository, or assist with setup problems.\n\nChoose a quick action below or type your question!",
       time: 'Just now',
     },
   ]);
@@ -176,7 +176,8 @@ export default function AiAssistant({ repo, isOpen, onClose }) {
         codeSnippet,
         errorSnippet,
         actionType: finalAction,
-        projectContext: repo ? `Repository: ${repo.name} (${repo.language})` : 'CodeTogether',
+        projectId: repo?._id || repo?.id || repo?.projectId,
+        projectContext: repo ? `Repository: ${repo.name} (${repo.language || 'JavaScript'})` : 'Colabz Workspace',
         history: messages.map((m) => ({ role: m.role, text: m.text })),
       });
 
@@ -230,7 +231,7 @@ export default function AiAssistant({ repo, isOpen, onClose }) {
           <div className="ai-title-wrap">
             <span className="ai-badge">🤖 AI Assistant</span>
             <div>
-              <h3>CodeTogether Copilot</h3>
+              <h3>Colabz Copilot</h3>
               <small>
                 {repo ? `${repo.name} · ` : ''}
                 <span className={status.configured ? 'status-live' : 'status-demo'}>

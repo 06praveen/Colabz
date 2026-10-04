@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import AppBackground from '../components/app-shell/AppBackground';
 import Sidebar from '../components/app-shell/Sidebar';
@@ -10,7 +10,7 @@ import HelpModal from '../components/app-shell/HelpModal';
 import ErrorBoundary from '../components/ui/ErrorBoundary';
 import { MobileBottomBar, MobileDrawer } from '../components/app-shell/MobileNav';
 import MiniCallWindow from '../components/calls/MiniCallWindow';
-import { mockProjects } from '../mock/projects';
+import { useProjects } from '../context/ProjectContext';
 
 export default function AuthenticatedLayout() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -18,9 +18,10 @@ export default function AuthenticatedLayout() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
-  const [currentProject, setCurrentProject] = useState(mockProjects[0]);
 
+  const { currentProject, selectProject, projects } = useProjects();
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Keyboard shortcuts setup (Cmd/Ctrl + K, Esc)
   useEffect(() => {
@@ -44,8 +45,6 @@ export default function AuthenticatedLayout() {
         <Sidebar
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          currentProject={currentProject}
-          onSelectProject={setCurrentProject}
           onCreateProject={() => setIsCreateProjectOpen(true)}
         />
       </div>
@@ -72,7 +71,14 @@ export default function AuthenticatedLayout() {
               style={{ width: '100%', flex: 1 }}
             >
               <ErrorBoundary>
-                <Outlet context={{ currentProject, setCurrentProject, openCreateProject: () => setIsCreateProjectOpen(true) }} />
+                <Outlet
+                  context={{
+                    currentProject,
+                    setCurrentProject: selectProject,
+                    openCreateProject: () => setIsCreateProjectOpen(true),
+                    projects,
+                  }}
+                />
               </ErrorBoundary>
             </motion.div>
           </AnimatePresence>
@@ -87,8 +93,6 @@ export default function AuthenticatedLayout() {
       <MobileDrawer
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
-        currentProject={currentProject}
-        onSelectProject={setCurrentProject}
         onCreateProject={() => setIsCreateProjectOpen(true)}
       />
 
@@ -104,8 +108,9 @@ export default function AuthenticatedLayout() {
         isOpen={isCreateProjectOpen}
         onClose={() => setIsCreateProjectOpen(false)}
         onProjectCreated={(newProj) => {
-          mockProjects.unshift(newProj);
-          setCurrentProject(newProj);
+          selectProject(newProj);
+          const pId = newProj._id || newProj.id || newProj.slug;
+          navigate(`/app/projects/${pId}/repository`);
         }}
       />
 
@@ -114,4 +119,3 @@ export default function AuthenticatedLayout() {
     </div>
   );
 }
-

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTasks } from '../../context/TaskContext';
-import { mockTaskService } from '../../services/mockTaskService';
+import { taskService } from '../../services/taskService';
 import TaskStatusBadge from '../../components/tasks/TaskStatusBadge';
 import TaskPriorityBadge from '../../components/tasks/TaskPriorityBadge';
 import EditTaskModal from '../../components/tasks/EditTaskModal';
@@ -23,9 +23,14 @@ export default function TaskDetail() {
   useEffect(() => {
     async function fetchTask() {
       setLoading(true);
-      const found = await mockTaskService.getTaskById(activeProjectId, taskId);
-      setTask(found);
-      setLoading(false);
+      try {
+        const found = await taskService.getTaskById(activeProjectId, taskId);
+        setTask(found);
+      } catch (err) {
+        console.error('Failed to fetch task:', err);
+      } finally {
+        setLoading(false);
+      }
     }
     fetchTask();
   }, [activeProjectId, taskId]);

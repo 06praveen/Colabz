@@ -39,14 +39,12 @@ export default function Calls() {
     navigate(`/app/projects/${activeProjectId}/calls/${call.id}`);
   };
 
-  const handleQuickStartVideo = async () => {
-    const newCall = await startNewCall({ title: 'Development Sync', type: 'video' });
-    navigate(`/app/projects/${activeProjectId}/calls/${newCall.id}`);
+  const handleQuickStartVideo = () => {
+    setIsStartOpen(true);
   };
 
-  const handleQuickStartVoice = async () => {
-    const newCall = await startNewCall({ title: 'Team Voice Huddle', type: 'voice' });
-    navigate(`/app/projects/${activeProjectId}/calls/${newCall.id}`);
+  const handleQuickStartVoice = () => {
+    setIsStartOpen(true);
   };
 
   return (

@@ -19,7 +19,14 @@ export default function ChatSidebar({ onOpenCreateModal }) {
 
   const getMemberForDM = (recipientId) => {
     if (!recipientId) return null;
-    return members.find((m) => m.id === recipientId || m.username === recipientId);
+    return members.find(
+      (m) =>
+        m.id === recipientId ||
+        m._id === recipientId ||
+        m.userId === recipientId ||
+        m.user?._id === recipientId ||
+        m.username === recipientId
+    );
   };
 
   return (

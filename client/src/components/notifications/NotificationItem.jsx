@@ -12,72 +12,93 @@ import {
   Trash2,
   ExternalLink
 } from 'lucide-react';
-import { mockMembers } from '../../mock/members';
-import { mockProjects } from '../../mock/projects';
 import { useNotificationContext } from '../../context/NotificationContext';
 
 export default function NotificationItem({ notification, compact = false, onClosePanel }) {
   const navigate = useNavigate();
   const { markAsRead, deleteNotification } = useNotificationContext();
 
-  const actor = mockMembers.find((m) => m.id === notification.actorId) || {
-    name: 'Team Member',
-    initials: 'TM',
-    color: '#6366f1'
-  };
+  const notifId = notification.id || notification._id;
+  const isRead = Boolean(notification.isRead || notification.read);
 
-  const project = mockProjects.find((p) => p.id === notification.projectId) || {
-    name: 'Campus Connect'
-  };
+  const actor = (notification.actor && typeof notification.actor === 'object')
+    ? {
+        name: notification.actor.name || 'Team Member',
+        avatar: notification.actor.avatar,
+        color: notification.actor.avatarColor || '#6366f1',
+        initials: (notification.actor.name || 'TM')
+          .split(' ')
+          .map((n) => n[0])
+          .join('')
+          .substring(0, 2)
+          .toUpperCase(),
+      }
+    : {
+        name: notification.actorName || 'Team Member',
+        initials: 'TM',
+        color: '#6366f1',
+      };
+
+  const project = (notification.project && typeof notification.project === 'object')
+    ? { name: notification.project.name || 'Project' }
+    : {
+        name: notification.projectName || 'Project',
+      };
 
   const getNotificationIcon = (type) => {
-    switch (type) {
-      case 'assignment':
-      case 'task':
-        return <CheckSquare size={14} color="#8b5cf6" />;
-      case 'issue':
-        return <CircleDot size={14} color="#f59e0b" />;
-      case 'repository':
-        return <GitCommit size={14} color="#3b82f6" />;
-      case 'call':
-        return <PhoneCall size={14} color="#10b981" />;
-      case 'mention':
-      case 'chat':
-        return <MessageSquare size={14} color="#ec4899" />;
-      case 'member':
-        return <UserPlus size={14} color="#06b6d4" />;
-      case 'system':
-        return <ShieldAlert size={14} color="#64748b" />;
-      default:
-        return <Bell size={14} color="#8b5cf6" />;
+    const typeKey = (type || '').toLowerCase();
+    if (typeKey.includes('task') || typeKey.includes('assignment')) {
+      return <CheckSquare size={14} color="#8b5cf6" />;
     }
+    if (typeKey.includes('issue')) {
+      return <CircleDot size={14} color="#f59e0b" />;
+    }
+    if (typeKey.includes('repo') || typeKey.includes('commit') || typeKey.includes('branch')) {
+      return <GitCommit size={14} color="#3b82f6" />;
+    }
+    if (typeKey.includes('call')) {
+      return <PhoneCall size={14} color="#10b981" />;
+    }
+    if (typeKey.includes('chat') || typeKey.includes('message') || typeKey.includes('mention')) {
+      return <MessageSquare size={14} color="#ec4899" />;
+    }
+    if (typeKey.includes('member') || typeKey.includes('invite') || typeKey.includes('invitation')) {
+      return <UserPlus size={14} color="#06b6d4" />;
+    }
+    if (typeKey.includes('system')) {
+      return <ShieldAlert size={14} color="#64748b" />;
+    }
+    return <Bell size={14} color="#8b5cf6" />;
   };
 
   const getTargetRoute = () => {
-    const projId = notification.projectId || 'proj_1';
-    switch (notification.entityType) {
-      case 'task':
-        return `/app/projects/${projId}/tasks`;
-      case 'issue':
-        return `/app/projects/${projId}/issues`;
-      case 'conversation':
-      case 'chat':
-        return `/app/projects/${projId}/chat`;
-      case 'call':
-        return `/app/projects/${projId}/calls`;
-      case 'repository':
-        return `/app/projects/${projId}/repository`;
-      case 'member':
-        return `/app/projects/${projId}/members`;
-      default:
-        return `/app/projects/${projId}`;
-    }
+    const projId =
+      (notification.project && typeof notification.project === 'object'
+        ? notification.project._id || notification.project.id
+        : notification.project) ||
+      notification.projectId ||
+      '';
+
+    const entityType = (notification.entityType || '').toLowerCase();
+    if (!projId) return '/app/projects';
+
+    if (entityType.includes('task')) return `/app/projects/${projId}/tasks`;
+    if (entityType.includes('issue')) return `/app/projects/${projId}/issues`;
+    if (entityType.includes('conv') || entityType.includes('chat') || entityType.includes('message'))
+      return `/app/projects/${projId}/chat`;
+    if (entityType.includes('call')) return `/app/projects/${projId}/calls`;
+    if (entityType.includes('repo') || entityType.includes('commit') || entityType.includes('branch'))
+      return `/app/projects/${projId}/repository`;
+    if (entityType.includes('member') || entityType.includes('invite'))
+      return `/app/projects/${projId}/members`;
+
+    return `/app/projects/${projId}`;
   };
 
   const handleClick = (e) => {
     e.stopPropagation();
-    if (!notification.read) {
-      markAsRead(notification.id);
+    if (!isRead) {
+      markAsRead(notifId);
     }
     if (onClosePanel) onClosePanel();
     navigate(getTargetRoute());
@@ -85,7 +106,7 @@ export default function NotificationItem({ notification, compact = false, onClos
 
   const handleDelete = (e) => {
     e.stopPropagation();
-    deleteNotification(notification.id);
+    deleteNotification(notifId);
   };
 
   return (

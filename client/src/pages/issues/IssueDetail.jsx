@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useIssues } from '../../context/IssueContext';
-import { mockIssueService } from '../../services/mockIssueService';
+import { issueService } from '../../services/issueService';
 import IssueStatusBadge from '../../components/issues/IssueStatusBadge';
 import TaskPriorityBadge from '../../components/tasks/TaskPriorityBadge';
 import IssueComments from '../../components/issues/IssueComments';
@@ -24,9 +24,14 @@ export default function IssueDetail() {
   useEffect(() => {
     async function fetchIssue() {
       setLoading(true);
-      const found = await mockIssueService.getIssueById(activeProjectId, issueId);
-      setIssue(found);
-      setLoading(false);
+      try {
+        const found = await issueService.getIssueById(activeProjectId, issueId);
+        setIssue(found);
+      } catch (err) {
+        console.error('Failed to fetch issue:', err);
+      } finally {
+        setLoading(false);
+      }
     }
     fetchIssue();
   }, [activeProjectId, issueId]);

@@ -3,7 +3,7 @@ import Modal from '../ui/Modal';
 import { useMembers } from '../../context/MemberContext';
 import { useToast } from '../../context/ToastContext';
 import { ShieldCheck } from 'lucide-react';
-import { ROLE_DESCRIPTIONS } from '../../mock/members';
+import { ROLE_DESCRIPTIONS } from '../../constants/roles';
 
 export default function ChangeRoleModal({ isOpen, onClose, member }) {
   const [role, setRole] = useState(member?.role || 'developer');

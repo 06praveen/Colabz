@@ -1,21 +1,66 @@
 import React from 'react';
 import { useOutletContext, useNavigate, useParams } from 'react-router-dom';
-import { FolderGit2, Users, GitCommit, GitBranch, ArrowRight } from 'lucide-react';
+import { FolderGit2, Users, GitCommit, GitBranch, Shield, Calendar, Code } from 'lucide-react';
 import { useRepository } from '../../context/RepositoryContext';
-import { useMembers } from '../../context/MemberContext';
 import ReadmeViewer from '../../components/repository/ReadmeViewer';
-import ProjectActivity from '../../components/activity/ProjectActivity';
 
 export default function ProjectOverview() {
-  const { project } = useOutletContext();
+  const outletContext = useOutletContext() || {};
+  const project = outletContext.project;
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const { files, commits, branches, repo } = useRepository();
-  const { members } = useMembers();
-  const activeId = projectId || 'proj_1';
+  const { files, commits, branches } = useRepository();
+
+  const activeId = projectId || project?._id || project?.id || 'workspace';
 
   const readmeFile = files.find((f) => f.name && f.name.toLowerCase() === 'readme.md');
-  const projectMembers = members && members.length > 0 ? members : (repo?.contributors || []);
+
+  // Real contributors from project owner & members
+  const owner = project?.owner;
+  const members = project?.members || [];
+  const contributors = [];
+
+  if (owner) {
+    contributors.push({
+      id: owner._id || owner.id || 'owner',
+      name: owner.name || 'Project Owner',
+      initials: owner.name
+        ? owner.name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase()
+        : 'OW',
+      role: 'Owner',
+    });
+  }
+
+  members.forEach((m) => {
+    const mId = m._id || m.id;
+    if (!contributors.some((c) => c.id === mId)) {
+      contributors.push({
+        id: mId,
+        name: m.name || 'Member',
+        initials: m.name
+          ? m.name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase()
+          : 'MB',
+        role: 'Member',
+      });
+    }
+  });
+
+  const techStack = project?.technologies || project?.techStack || ['React', 'Node.js', 'MongoDB'];
+  const commitsCount = commits?.length || 0;
+  const branchesCount = branches?.length || 1;
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'Recently';
+    try {
+      return new Date(dateStr).toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      return 'Recently';
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -27,7 +72,7 @@ export default function ProjectOverview() {
             <GitCommit size={15} color="var(--accent-primary)" />
           </div>
           <div style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-            {commits.length || 24}
+            {commitsCount}
           </div>
         </div>
 
@@ -37,7 +82,7 @@ export default function ProjectOverview() {
             <GitBranch size={15} color="var(--accent-primary)" />
           </div>
           <div style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-            {branches.length || 4}
+            {branchesCount}
           </div>
         </div>
 
@@ -47,8 +92,43 @@ export default function ProjectOverview() {
             <Users size={15} color="var(--accent-primary)" />
           </div>
           <div style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-            {projectMembers.length}
+            {contributors.length || 1}
           </div>
+        </div>
+      </div>
+
+      {/* Project Metadata Card */}
+      <div className="clb-card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+            Project Metadata & Stack
+          </h3>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <Calendar size={13} /> Created {formatDate(project?.createdAt)}
+          </span>
+        </div>
+
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+          {project?.description || 'No description provided for this workspace.'}
+        </p>
+
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+          {techStack.map((tech) => (
+            <span
+              key={tech}
+              style={{
+                fontSize: '0.725rem',
+                fontFamily: 'var(--font-mono)',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-secondary)',
+                padding: '0.15rem 0.5rem',
+                borderRadius: 'var(--radius-pill)',
+              }}
+            >
+              {tech}
+            </span>
+          ))}
         </div>
       </div>
 
@@ -56,7 +136,7 @@ export default function ProjectOverview() {
       <div className="clb-card" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-            Contributors & Team Members
+            Contributors & Workspace Members
           </h3>
           <button
             onClick={() => navigate(`/app/projects/${activeId}/members`)}
@@ -67,10 +147,10 @@ export default function ProjectOverview() {
           </button>
         </div>
         <div style={{ display: 'flex', gap: '0.85rem', flexWrap: 'wrap' }}>
-          {projectMembers.map((c, idx) => (
+          {contributors.map((c) => (
             <div
-              key={c.id || idx}
-              onClick={() => navigate(`/app/projects/${activeId}/members/${c.id || c.username}`)}
+              key={c.id}
+              onClick={() => navigate(`/app/projects/${activeId}/members`)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -81,7 +161,7 @@ export default function ProjectOverview() {
                 borderRadius: 'var(--radius-sm)',
                 fontSize: '0.8125rem',
                 cursor: 'pointer',
-                transition: 'border-color 0.15s ease'
+                transition: 'border-color 0.15s ease',
               }}
             >
               <div
@@ -95,23 +175,20 @@ export default function ProjectOverview() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontWeight: 600,
-                  fontSize: '0.7rem'
+                  fontSize: '0.7rem',
                 }}
               >
                 {c.initials}
               </div>
               <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{c.name}</span>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>({c.role})</span>
             </div>
           ))}
         </div>
       </div>
-
-      {/* Recent Project Activity Widget */}
-      <ProjectActivity projectId={activeId} limit={5} />
 
       {/* README section */}
       {readmeFile && <ReadmeViewer content={readmeFile.content} />}
     </div>
   );
 }
-

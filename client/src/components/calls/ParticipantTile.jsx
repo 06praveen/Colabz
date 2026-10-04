@@ -1,16 +1,25 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import Avatar from '../ui/Avatar';
 import { Mic, MicOff, VideoOff, Volume2 } from 'lucide-react';
 import ConnectionIndicator from './ConnectionIndicator';
 
 export default function ParticipantTile({
   member,
+  stream = null,
   isSelf = false,
   isMuted = false,
   isVideoOff = false,
   isSpeaking = false,
-  connectionQuality = 'Good'
+  connectionQuality = 'Good',
 }) {
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
   if (!member) return null;
 
   // Identity-based subtle gradient background
@@ -24,7 +33,8 @@ export default function ParticipantTile({
     return `linear-gradient(135deg, HSL(${h1}, 25%, 12%) 0%, HSL(${h2}, 30%, 8%) 100%)`;
   };
 
-  const bgGradient = getGradientForName(member.name);
+  const bgGradient = getGradientForName(member.name || 'Member');
+  const hasActiveVideoStream = stream && !isVideoOff && stream.getVideoTracks().some((t) => t.enabled);
 
   return (
     <div
@@ -44,33 +54,65 @@ export default function ParticipantTile({
         height: '100%',
         width: '100%',
         transition: 'all 0.2s ease',
-        boxShadow: isSpeaking ? '0 0 20px rgba(0, 229, 163, 0.2)' : '0 4px 12px rgba(0,0,0,0.3)'
+        boxShadow: isSpeaking ? '0 0 20px rgba(0, 229, 163, 0.2)' : '0 4px 12px rgba(0,0,0,0.3)',
       }}
     >
+      {/* Real Video Element */}
+      {hasActiveVideoStream && (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted={isSelf} // always mute local playback to prevent audio feedback
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            transform: isSelf ? 'scaleX(-1)' : 'none', // mirror self video
+            zIndex: 1,
+          }}
+        />
+      )}
+
+      {/* Fallback Audio element for remote audio-only stream */}
+      {!isSelf && stream && !hasActiveVideoStream && (
+        <audio
+          ref={(el) => {
+            if (el && stream) el.srcObject = stream;
+          }}
+          autoPlay
+          playsInline
+        />
+      )}
+
       {/* Video Placeholder / Avatar Area */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.85rem' }}>
-        <div style={{ position: 'relative' }}>
-          <Avatar name={member.name} src={member.avatar} size={72} />
-          {isSpeaking && (
-            <div
-              style={{
-                position: 'absolute',
-                inset: '-4px',
-                borderRadius: '50%',
-                border: '2px solid var(--accent-primary)',
-                animation: 'clb-pulse-speak 1.5s infinite ease-in-out'
-              }}
-            />
+      {!hasActiveVideoStream && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.85rem', zIndex: 2 }}>
+          <div style={{ position: 'relative' }}>
+            <Avatar name={member.name} src={member.avatar} size={72} />
+            {isSpeaking && (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: '-4px',
+                  borderRadius: '50%',
+                  border: '2px solid var(--accent-primary)',
+                  animation: 'clb-pulse-speak 1.5s infinite ease-in-out',
+                }}
+              />
+            )}
+          </div>
+
+          {/* Video Off Overlay Notice */}
+          {isVideoOff && (
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <VideoOff size={12} /> Camera off
+            </span>
           )}
         </div>
-
-        {/* Video Off Overlay Notice */}
-        {isVideoOff && (
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-            <VideoOff size={12} /> Camera off
-          </span>
-        )}
-      </div>
+      )}
 
       {/* Top Left Speaker Badge */}
       {isSpeaking && (
@@ -89,7 +131,8 @@ export default function ParticipantTile({
             color: 'var(--accent-primary)',
             padding: '0.15rem 0.5rem',
             borderRadius: 'var(--radius-pill)',
-            border: '1px solid rgba(0, 229, 163, 0.3)'
+            border: '1px solid rgba(0, 229, 163, 0.3)',
+            zIndex: 3,
           }}
         >
           <Volume2 size={12} />
@@ -110,7 +153,8 @@ export default function ParticipantTile({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          borderTop: '1px solid var(--border-subtle)'
+          borderTop: '1px solid var(--border-subtle)',
+          zIndex: 3,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -126,7 +170,7 @@ export default function ParticipantTile({
                 backgroundColor: 'rgba(0, 229, 163, 0.15)',
                 color: 'var(--accent-primary)',
                 padding: '0.05rem 0.35rem',
-                borderRadius: 'var(--radius-sm)'
+                borderRadius: 'var(--radius-sm)',
               }}
             >
               You
@@ -142,10 +186,10 @@ export default function ParticipantTile({
                 height: '22px',
                 borderRadius: '50%',
                 backgroundColor: 'rgba(255, 92, 112, 0.2)',
-                color: 'var(--danger)',
+                color: 'var(--danger, #ff5c70)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
               }}
               title="Microphone Muted"
             >
@@ -161,7 +205,7 @@ export default function ParticipantTile({
                 color: 'var(--accent-primary)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
               }}
               title="Microphone Active"
             >

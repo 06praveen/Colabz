@@ -55,16 +55,18 @@ export default function BranchList({ branches = [], currentBranch, onSelectBranc
                   <span>{b.lastCommitMessage}</span>
                   <span>•</span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                    <Clock size={11} /> {b.updatedAt}
+                    <Clock size={11} /> {b.updatedAt ? (typeof b.updatedAt === 'string' && b.updatedAt.includes('T') ? new Date(b.updatedAt).toLocaleDateString() : b.updatedAt) : 'Recently'}
                   </span>
                 </div>
               </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
-                {b.behindAhead}
-              </span>
+              {b.behindAhead && (
+                <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                  {b.behindAhead}
+                </span>
+              )}
               {!isCurrent && (
                 <button
                   onClick={() => onSelectBranch && onSelectBranch(b.name)}

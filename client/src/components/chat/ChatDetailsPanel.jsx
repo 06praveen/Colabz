@@ -1,8 +1,6 @@
 import React from 'react';
 import { useChat } from '../../context/ChatContext';
 import { useMembers } from '../../context/MemberContext';
-import { mockTasks } from '../../mock/tasks';
-import { mockIssues } from '../../mock/issues';
 import Avatar from '../ui/Avatar';
 import MemberRoleBadge from '../members/MemberRoleBadge';
 import { Users, FileCode, CheckSquare, CircleDot, Link2, X } from 'lucide-react';
@@ -95,69 +93,43 @@ export default function ChatDetailsPanel() {
           </div>
         </div>
 
-        {/* SHARED TASKS SECTION */}
+        {/* WORKSPACE SHORTCUTS */}
         <div>
           <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <CheckSquare size={14} color="var(--accent-primary)" />
-            Shared Tasks ({mockTasks.slice(0, 2).length})
+            <Link2 size={14} color="var(--accent-primary)" />
+            Workspace Shortcuts
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-            {mockTasks.slice(0, 2).map((t) => (
-              <div
-                key={t.id}
-                onClick={() => navigate(`/app/projects/${activeProjectId}/tasks/${t.id}`)}
-                style={{
-                  padding: '0.4rem 0.55rem',
-                  backgroundColor: 'var(--bg-subtle, rgba(255,255,255,0.02))',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-sm)',
-                  cursor: 'pointer'
-                }}
-              >
-                <div style={{ fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--accent-primary)', fontSize: '0.725rem' }}>
-                  {t.identifier}
-                </div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '0.775rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {t.title}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* SHARED ISSUES SECTION */}
-        <div>
-          <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <CircleDot size={14} color="var(--warning, #eab308)" />
-            Shared Issues ({mockIssues.slice(0, 2).length})
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-            {mockIssues.slice(0, 2).map((i) => (
-              <div
-                key={i.id}
-                onClick={() => navigate(`/app/projects/${activeProjectId}/issues/${i.id}`)}
-                style={{
-                  padding: '0.4rem 0.55rem',
-                  backgroundColor: 'var(--bg-subtle, rgba(255,255,255,0.02))',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-sm)',
-                  cursor: 'pointer'
-                }}
-              >
-                <div style={{ fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--warning, #eab308)', fontSize: '0.725rem' }}>
-                  #{i.number}
-                </div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '0.775rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {i.title}
-                </div>
-              </div>
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            <button
+              type="button"
+              onClick={() => navigate(`/app/projects/${activeProjectId}/tasks`)}
+              className="clb-btn clb-btn-ghost"
+              style={{ justifyContent: 'flex-start', fontSize: '0.775rem', gap: '0.4rem', padding: '0.35rem 0.5rem' }}
+            >
+              <CheckSquare size={13} color="var(--accent-primary)" />
+              <span>Project Task Board</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(`/app/projects/${activeProjectId}/issues`)}
+              className="clb-btn clb-btn-ghost"
+              style={{ justifyContent: 'flex-start', fontSize: '0.775rem', gap: '0.4rem', padding: '0.35rem 0.5rem' }}
+            >
+              <CircleDot size={13} color="var(--warning, #eab308)" />
+              <span>Project Issues</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(`/app/projects/${activeProjectId}/repository`)}
+              className="clb-btn clb-btn-ghost"
+              style={{ justifyContent: 'flex-start', fontSize: '0.775rem', gap: '0.4rem', padding: '0.35rem 0.5rem' }}
+            >
+              <FileCode size={13} color="var(--accent-primary)" />
+              <span>Repository Files</span>
+            </button>
           </div>
         </div>
-
-        {/* SHARED FILES SECTION */}
         <div>
           <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <FileCode size={14} color="var(--accent-primary)" />

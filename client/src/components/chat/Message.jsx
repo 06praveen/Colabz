@@ -20,11 +20,13 @@ export default function Message({
 
   const { members } = useMembers();
 
-  const sender = members.find((m) => m.id === message.senderId) || {
-    name: message.senderId === 'usr_1' ? 'Praveen Tiwari' : 'Teammate',
-    initials: 'PR',
-    avatar: null
-  };
+  const sender =
+    members.find((m) => m.id === message.senderId || m._id === message.senderId) ||
+    message.sender || {
+      name: 'User',
+      initials: 'U',
+      avatar: null,
+    };
 
   const handleSaveEdit = (e) => {
     e.preventDefault();

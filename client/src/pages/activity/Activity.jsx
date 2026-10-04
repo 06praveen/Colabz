@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Activity as ActivityIcon, Search, Folder, Filter } from 'lucide-react';
 import { useNotificationContext } from '../../context/NotificationContext';
+import { useProjects } from '../../context/ProjectContext';
 import ActivityTimeline from '../../components/activity/ActivityTimeline';
 import ActivityFilters from '../../components/activity/ActivityFilters';
-import { mockProjects } from '../../mock/projects';
 
 export default function Activity() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -15,6 +15,7 @@ export default function Activity() {
   const [projectFilter, setProjectFilter] = useState(selectedProjectParam);
 
   const { activity } = useNotificationContext();
+  const { projects } = useProjects();
 
   useEffect(() => {
     if (selectedProjectParam) {
@@ -104,11 +105,14 @@ export default function Activity() {
             }}
           >
             <option value="all">All Projects</option>
-            {mockProjects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
+            {projects.map((p) => {
+              const pId = p._id || p.id || p.slug;
+              return (
+                <option key={pId} value={pId}>
+                  {p.name}
+                </option>
+              );
+            })}
           </select>
         </div>
       </div>

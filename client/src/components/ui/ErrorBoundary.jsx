@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, RefreshCw, LayoutDashboard } from 'lucide-react';
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -20,6 +20,11 @@ export default class ErrorBoundary extends React.Component {
     window.location.reload();
   };
 
+  handleGoDashboard = () => {
+    this.setState({ hasError: false, error: null });
+    window.location.href = '/app/dashboard';
+  };
+
   render() {
     if (this.state.hasError) {
       return (
@@ -35,8 +40,8 @@ export default class ErrorBoundary extends React.Component {
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: '1rem',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+            gap: '1.25rem',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
           }}
         >
           <div
@@ -48,17 +53,17 @@ export default class ErrorBoundary extends React.Component {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#ef4444'
+              color: '#ef4444',
             }}
           >
             <AlertCircle size={24} />
           </div>
           <div>
-            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-              Workspace View Error
+            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.15rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              Something went wrong.
             </h3>
             <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              An unexpected runtime error occurred while rendering this workspace section.
+              An unexpected runtime error occurred. You can reload this view or return to the workspace dashboard.
             </p>
             {this.state.error?.message && (
               <code
@@ -72,32 +77,42 @@ export default class ErrorBoundary extends React.Component {
                   fontSize: '0.75rem',
                   color: 'var(--warning)',
                   textAlign: 'left',
-                  fontFamily: 'var(--font-mono)'
+                  fontFamily: 'var(--font-mono)',
+                  wordBreak: 'break-word',
                 }}
               >
                 {this.state.error.message}
               </code>
             )}
           </div>
-          <button
-            onClick={this.handleReset}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '0.5rem 1rem',
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--border-default)',
-              backgroundColor: 'var(--bg-elevated)',
-              color: 'var(--text-primary)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            <RefreshCw size={14} />
-            <span>Reload View</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button
+              onClick={this.handleReset}
+              className="clb-btn clb-btn-secondary"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontSize: '0.8125rem',
+              }}
+            >
+              <RefreshCw size={14} />
+              <span>Reload</span>
+            </button>
+            <button
+              onClick={this.handleGoDashboard}
+              className="clb-btn clb-btn-primary"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontSize: '0.8125rem',
+              }}
+            >
+              <LayoutDashboard size={14} />
+              <span>Go to Dashboard</span>
+            </button>
+          </div>
         </div>
       );
     }
@@ -105,3 +120,4 @@ export default class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
+

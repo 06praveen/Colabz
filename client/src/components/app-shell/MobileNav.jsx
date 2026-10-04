@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutDashboard, FolderGit2, MessageSquare, Bell, Settings, X, Plus } from 'lucide-react';
 import ProjectSwitcher from './ProjectSwitcher';
-import { mockProjects } from '../../mock/projects';
+import { useProjects } from '../../context/ProjectContext';
 
 export function MobileBottomBar() {
   const location = useLocation();
@@ -72,11 +72,10 @@ export function MobileBottomBar() {
 export function MobileDrawer({
   isOpen,
   onClose,
-  currentProject,
-  onSelectProject,
-  onCreateProject
+  onCreateProject,
 }) {
   const navigate = useNavigate();
+  const { projects, currentProject, selectProject } = useProjects();
 
   return (
     <AnimatePresence>
@@ -130,10 +129,12 @@ export function MobileDrawer({
 
             <div style={{ marginBottom: '1.5rem' }}>
               <ProjectSwitcher
-                projects={mockProjects}
+                projects={projects}
                 currentProject={currentProject}
                 onSelectProject={(proj) => {
-                  onSelectProject(proj);
+                  selectProject(proj);
+                  const pId = proj._id || proj.id || proj.slug;
+                  navigate(`/app/projects/${pId}/repository`);
                   onClose();
                 }}
                 onCreateProject={() => {
@@ -164,6 +165,13 @@ export function MobileDrawer({
                 style={{ justifyContent: 'flex-start' }}
               >
                 Messages
+              </button>
+              <button
+                onClick={() => { navigate('/app/inbox'); onClose(); }}
+                className="clb-btn clb-btn-secondary"
+                style={{ justifyContent: 'flex-start' }}
+              >
+                Inbox
               </button>
               <button
                 onClick={() => { navigate('/app/notifications'); onClose(); }}

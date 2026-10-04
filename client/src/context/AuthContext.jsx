@@ -1,58 +1,179 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import authService from '../services/authService';
+import { disconnectSocket } from '../services/socket';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('colabz_user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [token, setToken] = useState(() => localStorage.getItem('colabz_token') || null);
+  const [loading, setLoading] = useState(true);
 
-  // Mock Login Handler (Prepares frontend architecture for Phase 6 API)
-  const login = async (email, password) => {
+  // Initialize auth state on application startup
+  useEffect(() => {
+    let isMounted = true;
+
+    const initAuth = async () => {
+      const storedToken = localStorage.getItem('colabz_token');
+      if (!storedToken) {
+        if (isMounted) setLoading(false);
+        return;
+      }
+
+      try {
+        const response = await authService.getMe();
+        if (isMounted && response?.data?.user) {
+          const freshUser = response.data.user;
+          setUser(freshUser);
+          localStorage.setItem('colabz_user', JSON.stringify(freshUser));
+        }
+      } catch (err) {
+        // Token is invalid or expired
+        if (isMounted) {
+          localStorage.removeItem('colabz_token');
+          localStorage.removeItem('colabz_user');
+          setUser(null);
+          setToken(null);
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    initAuth();
+
+    // Listen for 401 session expiration from API interceptor
+    const handleAuthExpired = () => {
+      setUser(null);
+      setToken(null);
+      localStorage.removeItem('colabz_token');
+      localStorage.removeItem('colabz_user');
+    };
+
+    window.addEventListener('colabz_auth_expired', handleAuthExpired);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('colabz_auth_expired', handleAuthExpired);
+    };
+  }, []);
+
+  // Real Login Handler
+  const login = useCallback(async (email, password) => {
     setLoading(true);
-    // Simulate frontend validation & response
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const mockUser = {
-          name: email.split('@')[0],
-          email: email,
-          avatar: null,
-          role: 'DEVELOPER'
-        };
-        setUser(mockUser);
-        setIsAuthenticated(true);
-        setLoading(false);
-        resolve({ success: true, user: mockUser });
-      }, 600);
-    });
-  };
+    try {
+      const response = await authService.login(email, password);
+      const { user: loggedInUser, token: receivedToken } = response.data || {};
 
-  // Mock Signup Handler
-  const signup = async (name, email, password) => {
+      if (receivedToken) {
+        localStorage.setItem('colabz_token', receivedToken);
+        setToken(receivedToken);
+      }
+      if (loggedInUser) {
+        localStorage.setItem('colabz_user', JSON.stringify(loggedInUser));
+        setUser(loggedInUser);
+      }
+
+      return { success: true, user: loggedInUser };
+    } catch (err) {
+      const errorMessage =
+        err.response?.data?.message || err.message || 'Invalid email or password';
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Real Signup Handler
+  const signup = useCallback(async (nameOrData, username, email, password) => {
     setLoading(true);
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const mockUser = {
-          name,
-          email,
-          avatar: null,
-          role: 'OWNER'
-        };
-        setUser(mockUser);
-        setIsAuthenticated(true);
-        setLoading(false);
-        resolve({ success: true, user: mockUser });
-      }, 600);
-    });
-  };
+    try {
+      let payload = {};
+      if (typeof nameOrData === 'object') {
+        payload = nameOrData;
+      } else {
+        payload = { name: nameOrData, username, email, password };
+      }
 
-  const logout = () => {
-    setUser(null);
-    setIsAuthenticated(false);
-  };
+      const response = await authService.register(payload);
+      const { user: newUser, token: receivedToken } = response.data || {};
+
+      if (receivedToken) {
+        localStorage.setItem('colabz_token', receivedToken);
+        setToken(receivedToken);
+      }
+      if (newUser) {
+        localStorage.setItem('colabz_user', JSON.stringify(newUser));
+        setUser(newUser);
+      }
+
+      return { success: true, user: newUser };
+    } catch (err) {
+      const errorMessage =
+        err.response?.data?.message ||
+        (Array.isArray(err.response?.data?.errors)
+          ? err.response.data.errors[0]?.message
+          : null) ||
+        err.message ||
+        'Failed to create account';
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Sync / Update local user profile state
+  const updateUser = useCallback((updatedUser) => {
+    if (!updatedUser) return;
+    setUser((prev) => {
+      const merged = { ...(prev || {}), ...updatedUser };
+      localStorage.setItem('colabz_user', JSON.stringify(merged));
+      return merged;
+    });
+  }, []);
+
+  // Logout Handler
+  const logout = useCallback(async () => {
+    try {
+      await authService.logout();
+    } catch {
+      // Ignore errors on logout
+    } finally {
+      localStorage.removeItem('colabz_token');
+      localStorage.removeItem('colabz_user');
+      setUser(null);
+      setToken(null);
+      // Cleanly disconnect active socket
+      try {
+        disconnectSocket();
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  const isAuthenticated = Boolean(user && token);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, loading, login, signup, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        isAuthenticated,
+        loading,
+        login,
+        signup,
+        updateUser,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
